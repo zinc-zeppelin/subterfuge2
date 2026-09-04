@@ -173,6 +173,62 @@ export class SixPlayerHarness {
   }
 
   /**
+   * Switch communication tab
+   */
+  public async switchTab(playerIndex: number, tab: "PUBLIC" | "TEAM" | "DM"): Promise<void> {
+    const op = this.sessions[playerIndex];
+    if (tab === "PUBLIC") await op.page.click("#tab-public");
+    if (tab === "TEAM") await op.page.click("#tab-team");
+    if (tab === "DM") await op.page.click("#tab-dm");
+  }
+
+  /**
+   * Send a transmission on the currently active tab
+   */
+  public async sendMessage(playerIndex: number, text: string): Promise<void> {
+    const op = this.sessions[playerIndex];
+    await op.page.fill("#message-input", text);
+    await op.page.click("#send-message-btn");
+  }
+
+  /**
+   * Assert a message is visible in the player's current message feed
+   */
+  public async expectMessageInFeed(playerIndex: number, text: string): Promise<void> {
+    const op = this.sessions[playerIndex];
+    await expect(op.page.locator("#message-list")).toContainText(text, { timeout: 10000 });
+  }
+
+  /**
+   * Assert a message is NOT visible in the player's current message feed
+   */
+  public async expectMessageNotInFeed(playerIndex: number, text: string): Promise<void> {
+    const op = this.sessions[playerIndex];
+    await expect(op.page.locator("#message-list")).not.toContainText(text);
+  }
+
+  /**
+   * Select a target peer in the DM tab
+   */
+  public async selectDMPeer(playerIndex: number, targetPlayerIndex: number): Promise<void> {
+    const op = this.sessions[playerIndex];
+    const target = this.sessions[targetPlayerIndex];
+    const option = op.page.locator("#dm-peer-select option", { hasText: target.callsign });
+    const value = await option.getAttribute("value");
+    if (value) {
+      await op.page.selectOption("#dm-peer-select", value);
+    }
+  }
+
+  /**
+   * Burn current DM conversation
+   */
+  public async burnDM(playerIndex: number): Promise<void> {
+    const op = this.sessions[playerIndex];
+    await op.page.click("#burn-dm-btn");
+  }
+
+  /**
    * Clean up all browser contexts
    */
   public async teardown(): Promise<void> {

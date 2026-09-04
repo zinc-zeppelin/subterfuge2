@@ -9,6 +9,20 @@ export type TeamColor = "RED" | "BLUE";
 
 export type PlayerRole = "SPYMASTER" | "AGENT" | "MOLE";
 
+export type ChannelType = "PUBLIC" | "TEAM_RED" | "TEAM_BLUE" | "DM";
+
+export interface Message {
+  id: string;
+  roomId: string;
+  channelType: ChannelType;
+  senderId: string;
+  senderName: string;
+  senderApparentTeam?: TeamColor;
+  recipientId?: string; // Only for DMs
+  content: string;
+  createdAt: string;
+}
+
 export interface Player {
   id: string;
   roomId: string;

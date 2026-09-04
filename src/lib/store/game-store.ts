@@ -1,4 +1,4 @@
-import { Room, Player, ClientGameState, SanitizedPlayer } from "../types/game";
+import { Room, Player, ClientGameState, SanitizedPlayer, Message, ChannelType } from "../types/game";
 import { getRandomTheme, drawWordsForTheme } from "../data/word-bank";
 import { randomUUID } from "crypto";
 import fs from "fs";
@@ -7,6 +7,7 @@ import path from "path";
 interface StoreData {
   rooms: Record<string, Room>;
   sessions: Record<string, { roomCode: string; playerId: string }>;
+  messages: Record<string, Message[]>;
 }
 
 // File-backed game store for local development & multi-worker test execution
@@ -25,7 +26,7 @@ class GameStore {
       fs.mkdirSync(this.dataDir, { recursive: true });
     }
     if (!fs.existsSync(this.filePath)) {
-      const initial: StoreData = { rooms: {}, sessions: {} };
+      const initial: StoreData = { rooms: {}, sessions: {}, messages: {} };
       fs.writeFileSync(this.filePath, JSON.stringify(initial, null, 2), "utf-8");
     }
   }
@@ -34,15 +35,19 @@ class GameStore {
     this.ensureFile();
     try {
       const raw = fs.readFileSync(this.filePath, "utf-8");
-      return JSON.parse(raw);
+      const parsed = JSON.parse(raw);
+      if (!parsed.messages) parsed.messages = {};
+      return parsed;
     } catch {
-      return { rooms: {}, sessions: {} };
+      return { rooms: {}, sessions: {}, messages: {} };
     }
   }
 
   private save(data: StoreData): void {
     this.ensureFile();
-    fs.writeFileSync(this.filePath, JSON.stringify(data, null, 2), "utf-8");
+    const tmpPath = `${this.filePath}.tmp.${randomUUID()}`;
+    fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2), "utf-8");
+    fs.renameSync(tmpPath, this.filePath);
   }
 
   public generateRoomCode(): string {
@@ -324,8 +329,145 @@ class GameStore {
     };
   }
 
+  public sendMessage(params: {
+    code: string;
+    sessionToken: string;
+    channelType: ChannelType;
+    content: string;
+    recipientId?: string;
+  }): Message {
+    const data = this.load();
+    const upperCode = params.code.toUpperCase();
+    const room = data.rooms[upperCode];
+    if (!room) throw new Error("Room not found");
+
+    if (room.phase !== "INFILTRATION" && room.phase !== "VERDICT") {
+      throw new Error("COMMUNICATIONS_OFFLINE: Transmissions are restricted during current operational phase");
+    }
+
+    const sender = room.players.find((p) => p.sessionToken === params.sessionToken);
+    if (!sender) throw new Error("UNAUTHORIZED: Invalid operative session credentials");
+
+    const content = params.content.trim();
+    if (!content) throw new Error("INVALID_CONTENT: Message transmission cannot be empty");
+
+    // Channel Access Control
+    if (params.channelType === "TEAM_RED" && sender.apparentTeam !== "RED") {
+      throw new Error("UNAUTHORIZED: Restricted to Red Team frequency");
+    }
+    if (params.channelType === "TEAM_BLUE" && sender.apparentTeam !== "BLUE") {
+      throw new Error("UNAUTHORIZED: Restricted to Blue Team frequency");
+    }
+    if (params.channelType === "DM") {
+      if (!params.recipientId) {
+        throw new Error("INVALID_RECIPIENT: Recipient operative must be specified for direct channel");
+      }
+      const recipient = room.players.find((p) => p.id === params.recipientId);
+      if (!recipient) {
+        throw new Error("RECIPIENT_NOT_FOUND: Recipient operative not found in operation");
+      }
+    }
+
+    const message: Message = {
+      id: randomUUID(),
+      roomId: room.id,
+      channelType: params.channelType,
+      senderId: sender.id,
+      senderName: sender.displayName,
+      senderApparentTeam: sender.apparentTeam,
+      recipientId: params.recipientId,
+      content,
+      createdAt: new Date().toISOString(),
+    };
+
+    if (!data.messages[upperCode]) {
+      data.messages[upperCode] = [];
+    }
+    data.messages[upperCode].push(message);
+
+    this.save(data);
+    return message;
+  }
+
+  public getMessages(params: {
+    code: string;
+    sessionToken: string;
+    channelType?: ChannelType;
+    peerId?: string;
+  }): Message[] {
+    const data = this.load();
+    const upperCode = params.code.toUpperCase();
+    const room = data.rooms[upperCode];
+    if (!room) throw new Error("Room not found");
+
+    const caller = room.players.find((p) => p.sessionToken === params.sessionToken);
+    if (!caller) throw new Error("UNAUTHORIZED: Invalid operative session");
+
+    const allMessages = data.messages[upperCode] || [];
+
+    // Filter messages to only those authorized for caller
+    return allMessages.filter((m) => {
+      // 1. Channel filter
+      if (params.channelType && m.channelType !== params.channelType) {
+        return false;
+      }
+
+      // 2. Authorization check per message
+      if (m.channelType === "PUBLIC") {
+        return true;
+      }
+      if (m.channelType === "TEAM_RED") {
+        return caller.apparentTeam === "RED";
+      }
+      if (m.channelType === "TEAM_BLUE") {
+        return caller.apparentTeam === "BLUE";
+      }
+      if (m.channelType === "DM") {
+        const isParticipant = m.senderId === caller.id || m.recipientId === caller.id;
+        if (!isParticipant) return false;
+        if (params.peerId) {
+          return (
+            (m.senderId === caller.id && m.recipientId === params.peerId) ||
+            (m.senderId === params.peerId && m.recipientId === caller.id)
+          );
+        }
+        return true;
+      }
+      return false;
+    });
+  }
+
+  public burnConversation(params: {
+    code: string;
+    sessionToken: string;
+    peerId: string;
+  }): { success: boolean; count: number } {
+    const data = this.load();
+    const upperCode = params.code.toUpperCase();
+    const room = data.rooms[upperCode];
+    if (!room) throw new Error("Room not found");
+
+    const caller = room.players.find((p) => p.sessionToken === params.sessionToken);
+    if (!caller) throw new Error("UNAUTHORIZED: Invalid operative session");
+
+    const allMessages = data.messages[upperCode] || [];
+    const initialCount = allMessages.length;
+
+    data.messages[upperCode] = allMessages.filter((m) => {
+      if (m.channelType !== "DM") return true;
+      const isBetweenPair =
+        (m.senderId === caller.id && m.recipientId === params.peerId) ||
+        (m.senderId === params.peerId && m.recipientId === caller.id);
+      return !isBetweenPair;
+    });
+
+    const deletedCount = initialCount - data.messages[upperCode].length;
+    this.save(data);
+    return { success: true, count: deletedCount };
+  }
+
   public reset(): void {
-    const initial: StoreData = { rooms: {}, sessions: {} };
+    const initial: StoreData = { rooms: {}, sessions: {}, messages: {} };
     this.save(initial);
   }
 }

@@ -43,17 +43,17 @@ This checklist tracks implementation, code review, and playtest verification for
   - [ ] Non-moles receive "Clearance Denied" with no special actions
   - [ ] Genuine moles submit counter-signature and receive a 3-second self-destruct toast
   - [ ] Requester receives permanent cryptographic verified asset receipt
-- [ ] **Anti-Forensics**
-  - [ ] "Burn Conversation" button in 1-on-1 DMs to erase message history
+- [x] **Anti-Forensics**
+  - [x] "Burn Conversation" button in 1-on-1 DMs to erase message history (Verified in Slice 3)
 
 ## 5. Communication Suite & Channel Isolation
-- [ ] **Channel Structure**
-  - [ ] Public Wire (all players)
-  - [ ] Red Team Radio (apparent Red players, including Red Mole)
-  - [ ] Blue Team Radio (apparent Blue players, including Blue Mole)
-  - [ ] 1-on-1 Direct Messages (between any arbitrary pair)
-- [ ] **Security & Leak Prevention**
-  - [ ] Server-side channel access enforcement (clients cannot read unauthorized messages)
+- [x] **Channel Structure**
+  - [x] Public Wire (all players) (Verified in Slice 3)
+  - [x] Red Team Radio (apparent Red players, including Red Mole) (Verified in Slice 3)
+  - [x] Blue Team Radio (apparent Blue players, including Blue Mole) (Verified in Slice 3)
+  - [x] 1-on-1 Direct Messages (between any arbitrary pair) (Verified in Slice 3)
+- [x] **Security & Leak Prevention**
+  - [x] Server-side channel access enforcement (clients cannot read unauthorized messages) (Verified in Slice 3)
 
 ## 6. Endgame Verdicts & Scoring (+1 / 0)
 - [ ] **Verdict Deliberation**
@@ -74,8 +74,8 @@ This checklist tracks implementation, code review, and playtest verification for
 - [x] **6-Player Automated Playwright Test Harness**
   - [x] Slice 1: Multi-context connectivity, 6-player lobby orchestration, and session verification (Passed: 11.9s)
   - [x] Slice 2: Operational deployment, balanced role matrix, secret word assignment, and anti-peeking (Passed: 6.8s)
-  - [ ] Slice 4: Channel isolation and DM burn
-  - [ ] Slice 5: Targeted Mole verification and 3s toast disappearance
-  - [ ] Slice 6: Midpoint declassification broadcast
-  - [ ] Slice 7: 6-player verdict submission and scoring
-  - [ ] Slice 8: Full end-to-end 6-player match
+  - [x] Slice 3: Channel isolation between Public, Team Radio, and 1-on-1 DMs, and conversation burning (Passed: 12.8s)
+  - [ ] Slice 4: Targeted Mole verification and 3s toast disappearance
+  - [ ] Slice 5: Midpoint declassification broadcast
+  - [ ] Slice 6: 6-player verdict submission and scoring
+  - [ ] Slice 7: Full end-to-end 6-player match and debrief reveal
