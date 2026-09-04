@@ -81,6 +81,7 @@ export interface Room {
   startTime?: string;
   midpointTime?: string;
   endTime?: string;
+  verdictEndTime?: string;
   createdAt: string;
   players: Player[];
   codebook?: Record<string, string>; // playerId -> assignedWord
@@ -95,6 +96,7 @@ export interface ClientGameState {
     startTime?: string;
     midpointTime?: string;
     endTime?: string;
+    verdictEndTime?: string;
     declassifiedTheme?: string; // only populated after midpoint
   };
   self: {

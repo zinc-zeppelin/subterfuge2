@@ -32,9 +32,9 @@ This checklist tracks implementation, code review, and playtest verification for
   - [x] Random primary theme selection at game launch (Verified in Slice 2)
   - [x] $N$ distinct words drawn from selected theme and assigned 1-per-player (Verified in Slice 2)
   - [x] Theme name withheld from players at start (Verified in Slice 2)
-- [ ] **Midpoint Theme Declassification**
-  - [ ] Automated intelligence broadcast triggered at 50% elapsed time (Scheduled: Slice 6)
-  - [ ] Global banner displaying the confirmed operational theme (Scheduled: Slice 6)
+- [x] **Midpoint Theme Declassification**
+  - [x] Automated intelligence broadcast triggered at 50% elapsed time (Verified in Slice 5)
+  - [x] Global banner displaying the confirmed operational theme (Verified in Slice 5)
 
 ## 4. Covert Operations & Mole Verification
 - [x] **Screen-Share Safe Targeted Challenge**
@@ -76,6 +76,6 @@ This checklist tracks implementation, code review, and playtest verification for
   - [x] Slice 2: Operational deployment, balanced role matrix, secret word assignment, and anti-peeking (Passed: 6.8s)
   - [x] Slice 3: Channel isolation between Public, Team Radio, and 1-on-1 DMs, and conversation burning (Passed: 12.8s)
   - [x] Slice 4: Targeted Mole verification and 3s toast disappearance (Passed: 8.6s)
-  - [ ] Slice 5: Midpoint declassification broadcast
+  - [x] Slice 5: Midpoint declassification broadcast and phase shift (Passed: 8.8s)
   - [ ] Slice 6: 6-player verdict submission and scoring
   - [ ] Slice 7: Full end-to-end 6-player match and debrief reveal

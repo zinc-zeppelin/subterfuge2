@@ -289,6 +289,46 @@ export class SixPlayerHarness {
   }
 
   /**
+   * Warp time to target milestone (MIDPOINT or VERDICT)
+   */
+  public async warpTime(target: "MIDPOINT" | "VERDICT"): Promise<void> {
+    if (!this.roomCode) throw new Error("Room code not set");
+    const page = this.sessions[0].page;
+    const res = await page.request.post(`/api/rooms/${this.roomCode}/timer/warp`, {
+      data: { target },
+    });
+    if (!res.ok()) {
+      throw new Error(`Failed to warp time: ${await res.text()}`);
+    }
+  }
+
+  /**
+   * Assert that the declassified theme banner is visible across all 6 operatives
+   */
+  public async expectDeclassifiedThemeBannerOnAll(): Promise<string> {
+    let themeName = "";
+    for (const op of this.sessions) {
+      await expect(op.page.locator("#declassified-theme-banner")).toBeVisible({ timeout: 10000 });
+      const nameLocator = op.page.locator("#declassified-theme-name");
+      await expect(nameLocator).toBeVisible({ timeout: 10000 });
+      const text = await nameLocator.innerText();
+      expect(text.trim().length).toBeGreaterThan(0);
+      if (!themeName) themeName = text.trim();
+      expect(text.trim()).toBe(themeName);
+    }
+    return themeName;
+  }
+
+  /**
+   * Assert that the declassified theme banner is NOT visible on any operative
+   */
+  public async expectDeclassifiedThemeNotVisibleOnAll(): Promise<void> {
+    for (const op of this.sessions) {
+      await expect(op.page.locator("#declassified-theme-banner")).not.toBeVisible();
+    }
+  }
+
+  /**
    * Clean up all browser contexts
    */
   public async teardown(): Promise<void> {

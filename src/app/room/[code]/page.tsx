@@ -46,8 +46,54 @@ export default function RoomPage() {
   const [moleToast, setMoleToast] = useState<{ message: string; isMole: boolean } | null>(null);
   const [challengeActionLoading, setChallengeActionLoading] = useState(false);
 
+  // Operational Timers
+  const [timeLeft, setTimeLeft] = useState<string>("--:--:--");
+  const [midpointLeft, setMidpointLeft] = useState<string | null>(null);
+
   const decryptTimerRef = useRef<NodeJS.Timeout | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const updateTimers = () => {
+      if (!gameState) return;
+      const now = Date.now();
+
+      if (gameState.room.phase === "INFILTRATION" && gameState.room.endTime) {
+        const end = new Date(gameState.room.endTime).getTime();
+        const diff = Math.max(0, end - now);
+        const hours = Math.floor(diff / (1000 * 60 * 60));
+        const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+        const secs = Math.floor((diff % (1000 * 60)) / 1000);
+        setTimeLeft(
+          `${String(hours).padStart(2, "0")}:${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`
+        );
+
+        if (gameState.room.midpointTime && !gameState.room.declassifiedTheme) {
+          const mid = new Date(gameState.room.midpointTime).getTime();
+          const midDiff = Math.max(0, mid - now);
+          const mHours = Math.floor(midDiff / (1000 * 60 * 60));
+          const mMins = Math.floor((midDiff % (1000 * 60 * 60)) / (1000 * 60));
+          const mSecs = Math.floor((midDiff % (1000 * 60)) / 1000);
+          setMidpointLeft(
+            `${String(mHours).padStart(2, "0")}:${String(mMins).padStart(2, "0")}:${String(mSecs).padStart(2, "0")}`
+          );
+        } else {
+          setMidpointLeft(null);
+        }
+      } else if (gameState.room.phase === "VERDICT" && gameState.room.verdictEndTime) {
+        const end = new Date(gameState.room.verdictEndTime).getTime();
+        const diff = Math.max(0, end - now);
+        const mins = Math.floor(diff / (1000 * 60));
+        const secs = Math.floor((diff % (1000 * 60)) / 1000);
+        setTimeLeft(`${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`);
+        setMidpointLeft(null);
+      }
+    };
+
+    updateTimers();
+    const interval = setInterval(updateTimers, 1000);
+    return () => clearInterval(interval);
+  }, [gameState]);
 
   const fetchState = useCallback(async () => {
     if (!code) return;
@@ -385,8 +431,25 @@ export default function RoomPage() {
           </p>
         </div>
 
-        {/* Room Metrics */}
-        <div className="flex items-center gap-6 font-mono text-xs text-gray-400">
+        {/* Room Metrics & Operational Timer */}
+        <div className="flex flex-wrap items-center gap-4 sm:gap-6 font-mono text-xs text-gray-400">
+          {(isInfiltration || room.phase === "VERDICT") && (
+            <div
+              id="operational-timer-display"
+              className="bg-carbon-950 border border-classified-crimson/50 px-3 py-1.5 rounded flex items-center gap-2 text-classified-crimson shadow"
+            >
+              <Clock className="w-4 h-4 animate-spin text-classified-crimson" />
+              <div>
+                <span className="text-[10px] text-gray-500 uppercase tracking-wider block">
+                  {room.phase === "VERDICT" ? "VERDICT DELIBERATION:" : "MISSION TIME REMAINING:"}
+                </span>
+                <span id="timer-countdown" className="text-sm font-bold tracking-widest text-white">
+                  {timeLeft}
+                </span>
+              </div>
+            </div>
+          )}
+
           <div className="flex items-center gap-2">
             <Users className="w-4 h-4 text-gray-500" />
             <span>OPERATIVES: <strong className="text-white">{players.length}/12</strong></span>
@@ -397,6 +460,55 @@ export default function RoomPage() {
           </div>
         </div>
       </div>
+
+      {/* Global Midpoint Theme Declassification Broadcast Banner */}
+      {room.declassifiedTheme && (
+        <div
+          id="declassified-theme-banner"
+          className="mb-6 p-4 bg-classified-amber/10 border-2 border-classified-amber text-classified-amber rounded-lg font-mono shadow-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-pulse"
+        >
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-classified-amber text-black rounded font-bold text-xs uppercase tracking-widest flex items-center gap-1.5 shrink-0">
+              <Radio className="w-4 h-4 text-black animate-pulse" />
+              DECLASSIFIED INTEL
+            </div>
+            <div>
+              <div className="text-[11px] uppercase tracking-widest font-bold text-classified-amber/80">
+                AUTOMATED INTELLIGENCE INTERCEPT // 50% TIMELINE REACHED
+              </div>
+              <div className="text-lg font-extrabold tracking-wider text-white">
+                Operational Theme Confirmed:{" "}
+                <span
+                  id="declassified-theme-name"
+                  className="underline decoration-classified-amber text-classified-amber uppercase"
+                >
+                  {room.declassifiedTheme}
+                </span>
+              </div>
+            </div>
+          </div>
+          <div className="text-left sm:text-right text-xs text-classified-amber/70 font-mono shrink-0">
+            <div className="font-bold text-white uppercase tracking-wider">CROSS-REFERENCE CODE WORDS</div>
+            <div className="text-[10px] text-gray-400">UNMATCHED WORDS MAY INDICATE MOLE DECEPTION</div>
+          </div>
+        </div>
+      )}
+
+      {/* Midpoint Countdown Schedule Notice */}
+      {isInfiltration && midpointLeft && !room.declassifiedTheme && (
+        <div
+          id="midpoint-countdown-badge"
+          className="mb-6 px-4 py-2 bg-carbon-900 border border-carbon-800 rounded font-mono text-xs text-gray-400 flex items-center justify-between"
+        >
+          <div className="flex items-center gap-2">
+            <Clock className="w-3.5 h-3.5 text-classified-amber" />
+            <span className="uppercase tracking-wider">AUTOMATED INTELLIGENCE INTERCEPT SCHEDULED:</span>
+          </div>
+          <span className="text-classified-amber font-bold tracking-wider">
+            T-MINUS {midpointLeft}
+          </span>
+        </div>
+      )}
 
       {/* PHASE 1: LOBBY VIEW */}
       {!isInfiltration ? (

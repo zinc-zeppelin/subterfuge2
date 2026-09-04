@@ -320,6 +320,19 @@ class GameStore {
     }));
 
     const now = new Date();
+
+    // Auto transition to VERDICT phase if main countdown expired
+    if (
+      room.phase === "INFILTRATION" &&
+      room.endTime &&
+      now.getTime() >= new Date(room.endTime).getTime()
+    ) {
+      room.phase = "VERDICT";
+      const verdictMs = (room.verdictDurationMinutes || 60) * 60 * 1000;
+      room.verdictEndTime = new Date(now.getTime() + verdictMs).toISOString();
+      this.save(data);
+    }
+
     const midpointPassed =
       room.midpointTime && now.getTime() >= new Date(room.midpointTime).getTime();
 
@@ -332,6 +345,7 @@ class GameStore {
         startTime: room.startTime,
         midpointTime: room.midpointTime,
         endTime: room.endTime,
+        verdictEndTime: room.verdictEndTime,
         declassifiedTheme: midpointPassed ? room.selectedTheme : undefined,
       },
       self: {
@@ -630,6 +644,32 @@ class GameStore {
     if (!caller) throw new Error("UNAUTHORIZED: Invalid operative session");
 
     return (data.moleVerifications[upperCode] || []).filter((v) => v.requesterId === caller.id);
+  }
+
+  public warpTimer(params: { code: string; target: "MIDPOINT" | "VERDICT" }): Room {
+    const data = this.load();
+    const upperCode = params.code.toUpperCase();
+    const room = data.rooms[upperCode];
+    if (!room) throw new Error("Room not found");
+
+    const now = new Date();
+    const durationMs = (room.durationHours || 24) * 60 * 60 * 1000;
+
+    if (params.target === "MIDPOINT") {
+      room.startTime = new Date(now.getTime() - durationMs / 2 - 2000).toISOString();
+      room.midpointTime = new Date(now.getTime() - 2000).toISOString();
+      room.endTime = new Date(now.getTime() + durationMs / 2 - 2000).toISOString();
+    } else if (params.target === "VERDICT") {
+      room.startTime = new Date(now.getTime() - durationMs - 2000).toISOString();
+      room.midpointTime = new Date(now.getTime() - durationMs / 2).toISOString();
+      room.endTime = new Date(now.getTime() - 2000).toISOString();
+      room.phase = "VERDICT";
+      const verdictMs = (room.verdictDurationMinutes || 60) * 60 * 1000;
+      room.verdictEndTime = new Date(now.getTime() + verdictMs).toISOString();
+    }
+
+    this.save(data);
+    return room;
   }
 
   public reset(): void {
