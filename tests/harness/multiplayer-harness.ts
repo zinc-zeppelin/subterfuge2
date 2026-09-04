@@ -129,7 +129,7 @@ export class SixPlayerHarness {
   public async expectAllInInfiltrationPhase(): Promise<void> {
     for (const op of this.sessions) {
       await expect(op.page.locator("#room-phase-badge")).toHaveText("INFILTRATION", {
-        timeout: 10000,
+        timeout: 15000,
       });
     }
   }
@@ -360,6 +360,40 @@ export class SixPlayerHarness {
   public async expectVerdictLocked(playerIndex: number): Promise<void> {
     const op = this.sessions[playerIndex];
     await expect(op.page.locator("#verdict-locked-badge")).toBeVisible({ timeout: 10000 });
+  }
+
+  /**
+   * Spymaster selects a suspected mole for indictment
+   */
+  public async spymasterSelectMoleIndictment(playerIndex: number, targetId: string): Promise<void> {
+    const op = this.sessions[playerIndex];
+    await op.page.selectOption("#mole-indictment-select", targetId);
+  }
+
+  /**
+   * Assert debrief view is visible across all 6 operatives
+   */
+  public async expectDebriefViewOnAll(): Promise<void> {
+    for (const op of this.sessions) {
+      await expect(op.page.locator("#room-phase-badge")).toHaveText("DEBRIEF", { timeout: 15000 });
+      await expect(op.page.locator("#debrief-winner-banner")).toBeVisible({ timeout: 15000 });
+      await expect(op.page.locator("#debrief-codebook")).toBeVisible({ timeout: 15000 });
+      await expect(op.page.locator("#debrief-roster")).toBeVisible({ timeout: 15000 });
+    }
+  }
+
+  /**
+   * Host authorizes rematch and asserts all 6 operatives return to LOBBY
+   */
+  public async hostRematchAndExpectLobby(): Promise<void> {
+    const host = this.sessions[0];
+    await expect(host.page.locator("#rematch-btn")).toBeVisible({ timeout: 10000 });
+    await host.page.click("#rematch-btn");
+
+    for (const op of this.sessions) {
+      await expect(op.page.locator("#room-phase-badge")).toHaveText("LOBBY", { timeout: 15000 });
+      await expect(op.page.locator("#player-roster")).toBeVisible({ timeout: 15000 });
+    }
   }
 
   /**

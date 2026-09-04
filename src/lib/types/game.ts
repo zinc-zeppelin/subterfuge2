@@ -50,6 +50,7 @@ export interface SanitizedPlayer {
   // Revealed only in DEBRIEF phase
   actualTeam?: TeamColor;
   role?: PlayerRole;
+  assignedWord?: string;
 }
 
 export interface MoleChallenge {
@@ -88,6 +89,7 @@ export interface TeamVerdict {
   moleIndictmentName?: string;
   score?: number;
   correctGuesses?: string[];
+  tiebreakerBonus?: number;
   submittedAt: string;
 }
 

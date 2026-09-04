@@ -309,18 +309,6 @@ class GameStore {
     const self = room.players.find((p) => p.sessionToken === sessionToken);
     if (!self) throw new Error("Unauthorized operative session");
 
-    const isDebrief = room.phase === "DEBRIEF";
-
-    const sanitizedPlayers: SanitizedPlayer[] = room.players.map((p) => ({
-      id: p.id,
-      displayName: p.displayName,
-      apparentTeam: p.apparentTeam,
-      isReady: p.isReady,
-      isHost: p.isHost,
-      actualTeam: isDebrief ? p.actualTeam : undefined,
-      role: isDebrief ? p.role : undefined,
-    }));
-
     const now = new Date();
 
     // Auto transition to VERDICT phase if main countdown expired
@@ -334,6 +322,61 @@ class GameStore {
       room.verdictEndTime = new Date(now.getTime() + verdictMs).toISOString();
       this.save(data);
     }
+
+    // Auto transition to DEBRIEF phase if verdict countdown expired
+    if (
+      room.phase === "VERDICT" &&
+      room.verdictEndTime &&
+      now.getTime() >= new Date(room.verdictEndTime).getTime()
+    ) {
+      room.phase = "DEBRIEF";
+      const red = room.verdicts?.["RED"];
+      const blue = room.verdicts?.["BLUE"];
+      let redScore = red?.score || 0;
+      let blueScore = blue?.score || 0;
+
+      if (redScore === blueScore) {
+        if (red?.moleIndictmentId) {
+          const indictedByRed = room.players.find((p) => p.id === red.moleIndictmentId);
+          if (indictedByRed && indictedByRed.role === "MOLE") {
+            redScore += 2;
+            red.score = redScore;
+            red.tiebreakerBonus = 2;
+          }
+        }
+        if (blue?.moleIndictmentId) {
+          const indictedByBlue = room.players.find((p) => p.id === blue.moleIndictmentId);
+          if (indictedByBlue && indictedByBlue.role === "MOLE") {
+            blueScore += 2;
+            blue.score = blueScore;
+            blue.tiebreakerBonus = 2;
+          }
+        }
+      }
+
+      if (redScore > blueScore) {
+        room.winner = "RED";
+      } else if (blueScore > redScore) {
+        room.winner = "BLUE";
+      } else {
+        room.winner = "DRAW";
+      }
+
+      this.save(data);
+    }
+
+    const isDebrief = room.phase === "DEBRIEF";
+
+    const sanitizedPlayers: SanitizedPlayer[] = room.players.map((p) => ({
+      id: p.id,
+      displayName: p.displayName,
+      apparentTeam: p.apparentTeam,
+      isReady: p.isReady,
+      isHost: p.isHost,
+      actualTeam: isDebrief ? p.actualTeam : undefined,
+      role: isDebrief ? p.role : undefined,
+      assignedWord: isDebrief ? p.assignedWord : undefined,
+    }));
 
     const midpointPassed =
       room.midpointTime && now.getTime() >= new Date(room.midpointTime).getTime();
@@ -701,7 +744,7 @@ class GameStore {
     const caller = room.players.find((p) => p.sessionToken === params.sessionToken);
     if (!caller || !caller.apparentTeam) throw new Error("UNAUTHORIZED: Invalid operative session");
 
-    const cleanWord = params.word.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+    const cleanWord = params.word.trim().toUpperCase().replace(/[^A-Z0-9-]/g, "");
     if (!cleanWord) throw new Error("INVALID_WORD: Candidate word must be alphanumeric");
 
     if (!room.suggestions) {
@@ -796,7 +839,7 @@ class GameStore {
     // Clean and deduplicate guesses
     const cleanedGuesses: string[] = [];
     for (const g of params.guesses) {
-      const clean = g.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+      const clean = g.trim().toUpperCase().replace(/[^A-Z0-9-]/g, "");
       if (clean && !cleanedGuesses.includes(clean)) {
         cleanedGuesses.push(clean);
       }
@@ -806,12 +849,13 @@ class GameStore {
       throw new Error(`GUESS_LIMIT_EXCEEDED: Cannot submit more than ${n} code word guesses`);
     }
 
-    // Codebook target words
-    const targetWords = Object.values(room.codebook || {}).map((w) =>
-      w.trim().toUpperCase().replace(/[^A-Z0-9]/g, "")
-    );
+    // Codebook target words normalized for robust matching
+    const normalize = (w: string) => w.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+    const targetWordsNormalized = Object.values(room.codebook || {}).map(normalize);
 
-    const correctGuesses = cleanedGuesses.filter((g) => targetWords.includes(g));
+    const correctGuesses = cleanedGuesses.filter((g) =>
+      targetWordsNormalized.includes(normalize(g))
+    );
     const score = correctGuesses.length;
 
     let moleIndictmentName: string | undefined;
@@ -853,12 +897,16 @@ class GameStore {
           const indictedByRed = room.players.find((p) => p.id === red.moleIndictmentId);
           if (indictedByRed && indictedByRed.role === "MOLE") {
             redScore += 2;
+            red.score = redScore;
+            red.tiebreakerBonus = 2;
           }
         }
         if (blue.moleIndictmentId) {
           const indictedByBlue = room.players.find((p) => p.id === blue.moleIndictmentId);
           if (indictedByBlue && indictedByBlue.role === "MOLE") {
             blueScore += 2;
+            blue.score = blueScore;
+            blue.tiebreakerBonus = 2;
           }
         }
       }
@@ -876,6 +924,44 @@ class GameStore {
 
     this.save(data);
     return { verdict, room };
+  }
+
+  public rematchOperation(code: string, sessionToken: string): Room {
+    const data = this.load();
+    const upperCode = code.toUpperCase();
+    const room = data.rooms[upperCode];
+    if (!room) throw new Error("Room not found");
+
+    const host = room.players.find((p) => p.id === room.hostId);
+    if (!host || host.sessionToken !== sessionToken) {
+      throw new Error("UNAUTHORIZED: Only the Operation Commander can authorize a rematch");
+    }
+
+    room.phase = "LOBBY";
+    room.selectedTheme = undefined;
+    room.codebook = undefined;
+    room.startTime = undefined;
+    room.midpointTime = undefined;
+    room.endTime = undefined;
+    room.verdictEndTime = undefined;
+    room.verdicts = undefined;
+    room.suggestions = undefined;
+    room.winner = undefined;
+
+    for (const player of room.players) {
+      player.isReady = false;
+      player.apparentTeam = undefined;
+      player.actualTeam = undefined;
+      player.role = undefined;
+      player.assignedWord = undefined;
+    }
+
+    data.messages[upperCode] = [];
+    data.challenges[upperCode] = [];
+    data.moleVerifications[upperCode] = [];
+
+    this.save(data);
+    return room;
   }
 
   public reset(): void {

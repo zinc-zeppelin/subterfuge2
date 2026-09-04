@@ -17,11 +17,11 @@ This checklist tracks implementation, code review, and playtest verification for
 ## 2. Role Distribution Matrix
 - [x] **Spymaster**
   - [x] Exactly 1 Red Spymaster and 1 Blue Spymaster per game (Verified in Slice 2)
-  - [ ] Exclusive verdict lock-in authority (Scheduled: Slice 7)
+  - [x] Exclusive verdict lock-in authority (Verified in Slice 6 & 7)
 - [x] **Embedded Mole**
   - [x] 1 Mole per team for $N \in \{4, 6, 8, 10\}$; 2 Moles per team for $N = 12$ (Verified in Slice 2)
   - [x] Apparent team vs actual team distinction in database & UI (Verified in Slice 2)
-  - [ ] Moles win strictly if their actual team wins (Scheduled: Slice 7)
+  - [x] Moles win strictly if their actual team wins (Verified in Slice 7)
 - [x] **Field Agents**
   - [x] Correct distribution for remaining slots (Verified in Slice 2)
 
@@ -78,4 +78,4 @@ This checklist tracks implementation, code review, and playtest verification for
   - [x] Slice 4: Targeted Mole verification and 3s toast disappearance (Passed: 8.6s)
   - [x] Slice 5: Midpoint declassification broadcast and phase shift (Passed: 8.8s)
   - [x] Slice 6: 6-player verdict submission and scoring (Passed: 12.6s)
-  - [ ] Slice 7: Full end-to-end 6-player match and debrief reveal
+  - [x] Slice 7: Full end-to-end 6-player match, debrief reveal, and host rematch (Passed: 25.4s)

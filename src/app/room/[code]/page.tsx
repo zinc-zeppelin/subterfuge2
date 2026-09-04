@@ -19,6 +19,9 @@ import {
   Send,
   MessageSquare,
   ShieldAlert,
+  Award,
+  RefreshCw,
+  Trophy,
 } from "lucide-react";
 
 export default function RoomPage() {
@@ -58,6 +61,7 @@ export default function RoomPage() {
   const [moleIndictmentId, setMoleIndictmentId] = useState<string>("");
   const [isSubmittingVerdict, setIsSubmittingVerdict] = useState(false);
   const [verdictError, setVerdictError] = useState<string | null>(null);
+  const [isRematching, setIsRematching] = useState(false);
 
   const decryptTimerRef = useRef<NodeJS.Timeout | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
@@ -345,7 +349,7 @@ export default function RoomPage() {
 
   const handleAddSpymasterGuess = (wordToAdd?: string) => {
     const raw = wordToAdd || spymasterWordInput;
-    const word = raw.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+    const word = raw.trim().toUpperCase().replace(/[^A-Z0-9-]/g, "");
     if (!word) return;
     if (!spymasterGuesses.includes(word)) {
       if (spymasterGuesses.length >= (gameState?.players.length || 6)) {
@@ -384,6 +388,31 @@ export default function RoomPage() {
       setVerdictError(err.message);
     } finally {
       setIsSubmittingVerdict(false);
+    }
+  };
+
+  const handleRematch = async () => {
+    if (!code || isRematching) return;
+    setIsRematching(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/rooms/${code}/rematch`, {
+        method: "POST",
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Failed to authorize rematch");
+      }
+      setSpymasterGuesses([]);
+      setSpymasterWordInput("");
+      setProposalInput("");
+      setMoleToast(null);
+      setIsDecrypted(false);
+      await fetchState();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setIsRematching(false);
     }
   };
 
@@ -430,7 +459,7 @@ export default function RoomPage() {
     );
   }
 
-  const { room, self, players } = gameState;
+  const { room, self, players, allVerdicts, codebook } = gameState;
   const isEven = players.length % 2 === 0 && players.length >= 4;
   const allReady = players.length >= 4 && players.every((p) => p.isReady);
   const isInfiltration = room.phase === "INFILTRATION";
@@ -549,7 +578,7 @@ export default function RoomPage() {
       </div>
 
       {/* Global Midpoint Theme Declassification Broadcast Banner */}
-      {room.declassifiedTheme && (
+      {room.declassifiedTheme && room.phase !== "DEBRIEF" && (
         <div
           id="declassified-theme-banner"
           className="mb-6 p-4 bg-classified-amber/10 border-2 border-classified-amber text-classified-amber rounded-lg font-mono shadow-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-pulse"
@@ -716,6 +745,400 @@ export default function RoomPage() {
                 </button>
               )}
             </div>
+          </div>
+        </div>
+      ) : room.phase === "DEBRIEF" ? (
+        /* PHASE 3: DEBRIEF VIEW (DECLASSIFIED MASTER CODEBOOK + UNMASKED IDENTITIES + REMATCH) */
+        <div className="space-y-8" id="debrief-view">
+          {/* Victory Announcement Banner */}
+          <div
+            id="debrief-winner-banner"
+            className={`p-6 rounded-lg border-2 font-mono shadow-2xl relative overflow-hidden ${
+              room.winner === "RED"
+                ? "bg-red-950/30 border-red-600 text-red-100"
+                : room.winner === "BLUE"
+                ? "bg-blue-950/30 border-blue-600 text-blue-100"
+                : "bg-carbon-900 border-classified-amber text-amber-100"
+            }`}
+          >
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4">
+              <div className="flex items-center gap-3">
+                <Trophy
+                  className={`w-8 h-8 ${
+                    room.winner === "RED"
+                      ? "text-red-500"
+                      : room.winner === "BLUE"
+                      ? "text-blue-500"
+                      : "text-classified-amber"
+                  }`}
+                />
+                <div>
+                  <span className="text-[10px] uppercase tracking-widest text-gray-400 block">
+                    CLASSIFIED MISSION DEBRIEF // ALL OBJECTIVES TERMINATED
+                  </span>
+                  <h1 className="text-2xl sm:text-3xl font-black uppercase tracking-wider">
+                    {room.winner === "RED"
+                      ? "CRIMSON PACT VICTORY"
+                      : room.winner === "BLUE"
+                      ? "COBALT SYNDICATE VICTORY"
+                      : "STALEMATE // OPERATIONAL DRAW"}
+                  </h1>
+                </div>
+              </div>
+              <span className="classified-stamp text-xs text-classified-crimson border-classified-crimson shrink-0">
+                MISSION DECLASSIFIED
+              </span>
+            </div>
+
+            {/* Tiebreaker Resolution Notice if applicable */}
+            {(allVerdicts?.RED?.tiebreakerBonus || allVerdicts?.BLUE?.tiebreakerBonus) && (
+              <div
+                id="tiebreaker-notice"
+                className="mb-4 p-3 bg-carbon-950/80 border border-classified-amber/60 rounded text-xs text-classified-amber flex items-center gap-2"
+              >
+                <ShieldAlert className="w-4 h-4 shrink-0" />
+                <span>
+                  TIEBREAKER RESOLVED: Base word scores were tied. The +2 Mole Indictment bonus awarded victory to{" "}
+                  <strong className="underline uppercase">{room.winner} FACTION</strong>!
+                </span>
+              </div>
+            )}
+
+            {/* Final Scoreboard */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+              {/* Red Final Score */}
+              <div
+                id="red-final-score"
+                className={`p-4 rounded border font-mono ${
+                  room.winner === "RED"
+                    ? "bg-red-950/60 border-red-500 ring-1 ring-red-500"
+                    : "bg-carbon-950 border-red-900/40"
+                }`}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-bold text-red-400 text-sm flex items-center gap-2">
+                    <Flag className="w-4 h-4" /> RED FACTION
+                  </span>
+                  <span className="text-xs text-gray-400">
+                    Spymaster: {allVerdicts?.RED?.submittedByName || "N/A"}
+                  </span>
+                </div>
+                <div className="text-3xl font-black text-white mb-1">
+                  {allVerdicts?.RED?.score ?? 0}{" "}
+                  <span className="text-xs font-normal text-gray-400">PTS</span>
+                </div>
+                <div className="text-xs text-gray-400 space-y-1 border-t border-red-900/40 pt-2 mt-2">
+                  <div className="flex justify-between">
+                    <span>Correct Code Words:</span>
+                    <span className="text-white font-bold">
+                      {allVerdicts?.RED?.correctGuesses?.length ?? 0} / {allVerdicts?.RED?.guesses?.length ?? 0}
+                    </span>
+                  </div>
+                  {allVerdicts?.RED?.tiebreakerBonus && (
+                    <div className="flex justify-between text-classified-terminal font-bold">
+                      <span>Mole Indictment Bonus:</span>
+                      <span>+2 PTS</span>
+                    </div>
+                  )}
+                  {allVerdicts?.RED?.moleIndictmentName && (
+                    <div className="flex justify-between text-[11px] text-gray-400">
+                      <span>Indicted Operative:</span>
+                      <span className="text-red-300">{allVerdicts.RED.moleIndictmentName}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Blue Final Score */}
+              <div
+                id="blue-final-score"
+                className={`p-4 rounded border font-mono ${
+                  room.winner === "BLUE"
+                    ? "bg-blue-950/60 border-blue-500 ring-1 ring-blue-500"
+                    : "bg-carbon-950 border-blue-900/40"
+                }`}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-bold text-blue-400 text-sm flex items-center gap-2">
+                    <Flag className="w-4 h-4" /> BLUE FACTION
+                  </span>
+                  <span className="text-xs text-gray-400">
+                    Spymaster: {allVerdicts?.BLUE?.submittedByName || "N/A"}
+                  </span>
+                </div>
+                <div className="text-3xl font-black text-white mb-1">
+                  {allVerdicts?.BLUE?.score ?? 0}{" "}
+                  <span className="text-xs font-normal text-gray-400">PTS</span>
+                </div>
+                <div className="text-xs text-gray-400 space-y-1 border-t border-blue-900/40 pt-2 mt-2">
+                  <div className="flex justify-between">
+                    <span>Correct Code Words:</span>
+                    <span className="text-white font-bold">
+                      {allVerdicts?.BLUE?.correctGuesses?.length ?? 0} / {allVerdicts?.BLUE?.guesses?.length ?? 0}
+                    </span>
+                  </div>
+                  {allVerdicts?.BLUE?.tiebreakerBonus && (
+                    <div className="flex justify-between text-classified-terminal font-bold">
+                      <span>Mole Indictment Bonus:</span>
+                      <span>+2 PTS</span>
+                    </div>
+                  )}
+                  {allVerdicts?.BLUE?.moleIndictmentName && (
+                    <div className="flex justify-between text-[11px] text-gray-400">
+                      <span>Indicted Operative:</span>
+                      <span className="text-blue-300">{allVerdicts.BLUE.moleIndictmentName}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Master Codebook Declassification Matrix */}
+          <div id="debrief-codebook" className="bg-carbon-900 border border-carbon-800 rounded-lg p-6 font-mono">
+            <div className="flex items-center justify-between mb-4 border-b border-carbon-800 pb-3">
+              <div className="flex items-center gap-2">
+                <Lock className="w-4 h-4 text-classified-amber" />
+                <h3 className="text-sm font-bold uppercase text-white tracking-wider">
+                  Master Codebook Declassification Matrix
+                </h3>
+              </div>
+              <span className="text-xs text-gray-500">
+                ALL {players.length} ENCRYPTED CIPHERS UNLOCKED
+              </span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="border-b border-carbon-800 text-gray-400 uppercase tracking-wider bg-carbon-950/60">
+                    <th className="py-2.5 px-3">Secret Code Word</th>
+                    <th className="py-2.5 px-3">Assigned Operative</th>
+                    <th className="py-2.5 px-3">Cover / True Allegiance</th>
+                    <th className="py-2.5 px-3 text-center">Red Verdict</th>
+                    <th className="py-2.5 px-3 text-center">Blue Verdict</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-carbon-800">
+                  {players.map((p) => {
+                    const word = p.assignedWord || codebook?.[p.id] || "UNKNOWN";
+                    const normalizeWord = (w: string) => w.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+                    const redGuessed = allVerdicts?.RED?.guesses?.some(
+                      (g) => normalizeWord(g) === normalizeWord(word)
+                    );
+                    const blueGuessed = allVerdicts?.BLUE?.guesses?.some(
+                      (g) => normalizeWord(g) === normalizeWord(word)
+                    );
+
+                    return (
+                      <tr key={p.id} className="hover:bg-carbon-850/50 transition-colors">
+                        <td className="py-3 px-3 font-bold text-classified-amber tracking-wider text-sm uppercase">
+                          {word.toUpperCase()}
+                        </td>
+                        <td className="py-3 px-3">
+                          <div className="font-bold text-white flex items-center gap-1.5">
+                            {p.displayName}
+                            {p.id === self.id && (
+                              <span className="text-[9px] bg-carbon-800 text-classified-amber px-1.5 py-0.2 rounded border border-carbon-700">
+                                YOU
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="py-3 px-3">
+                          <div className="flex items-center gap-1.5">
+                            <span
+                              className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                p.apparentTeam === "RED"
+                                  ? "bg-red-950/80 text-red-400 border border-red-800"
+                                  : "bg-blue-950/80 text-blue-400 border border-blue-800"
+                              }`}
+                            >
+                              {p.apparentTeam} COVER
+                            </span>
+                            {p.role === "MOLE" && (
+                              <span
+                                className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                  p.actualTeam === "RED"
+                                    ? "bg-red-900 text-red-200"
+                                    : "bg-blue-900 text-blue-200"
+                                }`}
+                              >
+                                ACTUAL: {p.actualTeam}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="py-3 px-3 text-center">
+                          {redGuessed ? (
+                            <span className="inline-flex items-center gap-1 text-classified-terminal font-bold bg-green-950/40 px-2 py-0.5 rounded border border-green-800/60">
+                              <CheckCircle2 className="w-3 h-3" /> HIT (+1)
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-gray-500 bg-carbon-950 px-2 py-0.5 rounded border border-carbon-800">
+                              MISSED (0)
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-3 px-3 text-center">
+                          {blueGuessed ? (
+                            <span className="inline-flex items-center gap-1 text-classified-terminal font-bold bg-green-950/40 px-2 py-0.5 rounded border border-green-800/60">
+                              <CheckCircle2 className="w-3 h-3" /> HIT (+1)
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-gray-500 bg-carbon-950 px-2 py-0.5 rounded border border-carbon-800">
+                              MISSED (0)
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* True Operative Roster & Traitor Unmasking */}
+          <div id="debrief-roster" className="bg-carbon-900 border border-carbon-800 rounded-lg p-6 font-mono">
+            <div className="flex items-center justify-between mb-4 border-b border-carbon-800 pb-3">
+              <div className="flex items-center gap-2">
+                <Users className="w-4 h-4 text-gray-400" />
+                <h3 className="text-sm font-bold uppercase text-white tracking-wider">
+                  True Operative Roster & Counter-Intelligence File
+                </h3>
+              </div>
+              <span className="text-xs text-gray-500">
+                ALL COVERT IDENTITIES REVEALED
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {players.map((p) => {
+                const isSelf = p.id === self.id;
+                const isMole = p.role === "MOLE";
+                const won = room.winner !== "DRAW" && p.actualTeam === room.winner;
+                const draw = room.winner === "DRAW";
+
+                return (
+                  <div
+                    key={p.id}
+                    id={`operative-dossier-${p.id}`}
+                    className={`p-4 rounded-lg border relative transition-all ${
+                      isMole
+                        ? "bg-red-950/20 border-classified-crimson/80"
+                        : "bg-carbon-950 border-carbon-800"
+                    }`}
+                  >
+                    {isMole && (
+                      <div className="mb-2">
+                        <span
+                          id={`mole-reveal-${p.id}`}
+                          className="classified-stamp text-[10px] text-classified-crimson border-classified-crimson bg-red-950/70 block text-center"
+                        >
+                          TRAITOR UNMASKED // ENEMY MOLE
+                        </span>
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-bold text-white text-sm flex items-center gap-1.5">
+                        {p.displayName}
+                        {isSelf && (
+                          <span className="text-[9px] bg-carbon-800 text-classified-amber px-1.5 py-0.2 rounded border border-carbon-700">
+                            YOU
+                          </span>
+                        )}
+                      </span>
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${
+                          p.role === "SPYMASTER"
+                            ? "bg-amber-950 text-amber-400 border border-amber-800"
+                            : p.role === "MOLE"
+                            ? "bg-red-900 text-red-200 border border-red-700"
+                            : "bg-gray-800 text-gray-300 border border-gray-700"
+                        }`}
+                      >
+                        {p.role}
+                      </span>
+                    </div>
+
+                    <div className="text-xs space-y-1 text-gray-400 border-t border-carbon-800/80 pt-2 mb-3">
+                      <div className="flex justify-between">
+                        <span>Apparent Cover:</span>
+                        <span className={p.apparentTeam === "RED" ? "text-red-400" : "text-blue-400"}>
+                          {p.apparentTeam} FACTION
+                        </span>
+                      </div>
+                      <div className="flex justify-between font-bold">
+                        <span>True Allegiance:</span>
+                        <span className={p.actualTeam === "RED" ? "text-red-400" : "text-blue-400"}>
+                          {p.actualTeam} FACTION
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Assigned Code Word:</span>
+                        <span className="text-classified-amber font-bold uppercase">
+                          {(p.assignedWord || codebook?.[p.id] || "N/A").toUpperCase()}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Individual Outcome: Moles win if and only if their ACTUAL team wins */}
+                    <div className="border-t border-carbon-800/80 pt-2 flex items-center justify-between text-xs">
+                      <span className="text-gray-500 uppercase text-[10px]">Operative Result:</span>
+                      {draw ? (
+                        <span className="font-bold text-classified-amber">STALEMATE (DRAW)</span>
+                      ) : won ? (
+                        <span
+                          id={`operative-outcome-${p.id}`}
+                          className="font-bold text-classified-terminal flex items-center gap-1"
+                        >
+                          <CheckCircle2 className="w-3 h-3" /> VICTORY
+                        </span>
+                      ) : (
+                        <span
+                          id={`operative-outcome-${p.id}`}
+                          className="font-bold text-red-400 flex items-center gap-1"
+                        >
+                          DEFEAT
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Rematch Section */}
+          <div className="bg-carbon-900 border border-carbon-800 rounded-lg p-6 font-mono text-center">
+            {self.isHost ? (
+              <div className="max-w-md mx-auto space-y-3">
+                <h4 className="text-sm font-bold uppercase text-white tracking-wider">
+                  Operation Debrief Concluded
+                </h4>
+                <p className="text-xs text-gray-400">
+                  As Operation Commander, you may authorize a new deployment. All operatives will remain connected and return to the ready briefing lobby.
+                </p>
+                <button
+                  id="rematch-btn"
+                  onClick={handleRematch}
+                  disabled={isRematching}
+                  className="w-full py-3 bg-classified-crimson hover:bg-red-800 disabled:opacity-40 text-white font-bold tracking-wider uppercase rounded transition-colors text-xs flex items-center justify-center gap-2"
+                >
+                  <RefreshCw className={`w-4 h-4 ${isRematching ? "animate-spin" : ""}`} />
+                  {isRematching ? "RESETTING OPERATIONS..." : "COMMENCE REMATCH // RETURN TO LOBBY"}
+                </button>
+              </div>
+            ) : (
+              <div id="rematch-standby-notice" className="text-xs text-gray-400 space-y-1">
+                <div className="text-classified-amber font-bold uppercase tracking-wider">
+                  STANDBY FOR FURTHER DIRECTIVES
+                </div>
+                <p>Awaiting Operation Commander to authorize new mission deployment...</p>
+              </div>
+            )}
           </div>
         </div>
       ) : (
@@ -977,10 +1400,10 @@ export default function RoomPage() {
                           >
                             <option value="">-- No Indictment --</option>
                             {players
-                              .filter((p) => p.apparentTeam !== self.apparentTeam)
+                              .filter((p) => p.id !== self.id)
                               .map((p) => (
                                 <option key={p.id} value={p.id}>
-                                  {p.displayName} (OPPOSING {p.apparentTeam})
+                                  {p.displayName} ({p.apparentTeam})
                                 </option>
                               ))}
                           </select>
