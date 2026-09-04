@@ -1,4 +1,13 @@
-import { Room, Player, ClientGameState, SanitizedPlayer, Message, ChannelType } from "../types/game";
+import {
+  Room,
+  Player,
+  ClientGameState,
+  SanitizedPlayer,
+  Message,
+  ChannelType,
+  MoleChallenge,
+  MoleVerification,
+} from "../types/game";
 import { getRandomTheme, drawWordsForTheme } from "../data/word-bank";
 import { randomUUID } from "crypto";
 import fs from "fs";
@@ -8,6 +17,8 @@ interface StoreData {
   rooms: Record<string, Room>;
   sessions: Record<string, { roomCode: string; playerId: string }>;
   messages: Record<string, Message[]>;
+  moleVerifications: Record<string, MoleVerification[]>;
+  challenges: Record<string, MoleChallenge[]>;
 }
 
 // File-backed game store for local development & multi-worker test execution
@@ -26,7 +37,13 @@ class GameStore {
       fs.mkdirSync(this.dataDir, { recursive: true });
     }
     if (!fs.existsSync(this.filePath)) {
-      const initial: StoreData = { rooms: {}, sessions: {}, messages: {} };
+      const initial: StoreData = {
+        rooms: {},
+        sessions: {},
+        messages: {},
+        moleVerifications: {},
+        challenges: {},
+      };
       fs.writeFileSync(this.filePath, JSON.stringify(initial, null, 2), "utf-8");
     }
   }
@@ -37,9 +54,11 @@ class GameStore {
       const raw = fs.readFileSync(this.filePath, "utf-8");
       const parsed = JSON.parse(raw);
       if (!parsed.messages) parsed.messages = {};
+      if (!parsed.moleVerifications) parsed.moleVerifications = {};
+      if (!parsed.challenges) parsed.challenges = {};
       return parsed;
     } catch {
-      return { rooms: {}, sessions: {}, messages: {} };
+      return { rooms: {}, sessions: {}, messages: {}, moleVerifications: {}, challenges: {} };
     }
   }
 
@@ -326,6 +345,26 @@ class GameStore {
         isHost: self.isHost,
       },
       players: sanitizedPlayers,
+      verifiedAssets: (data.moleVerifications[upperCode] || [])
+        .filter((v) => v.requesterId === self.id)
+        .map((v) => v.moleId),
+      incomingChallenges: (data.challenges[upperCode] || [])
+        .filter((c) => c.targetId === self.id && c.status === "PENDING")
+        .map((c) => ({
+          id: c.id,
+          requesterId: c.requesterId,
+          requesterName: c.requesterName,
+          createdAt: c.createdAt,
+        })),
+      challengeStatuses: (() => {
+        const statuses: Record<string, "PENDING" | "ACCEPTED" | "DENIED"> = {};
+        (data.challenges[upperCode] || [])
+          .filter((c) => c.requesterId === self.id)
+          .forEach((c) => {
+            statuses[c.targetId] = c.status;
+          });
+        return statuses;
+      })(),
     };
   }
 
@@ -466,8 +505,141 @@ class GameStore {
     return { success: true, count: deletedCount };
   }
 
+  public initiateMoleChallenge(params: {
+    code: string;
+    sessionToken: string;
+    targetPlayerId: string;
+  }): MoleChallenge {
+    const data = this.load();
+    const upperCode = params.code.toUpperCase();
+    const room = data.rooms[upperCode];
+    if (!room) throw new Error("Room not found");
+
+    if (room.phase !== "INFILTRATION" && room.phase !== "VERDICT") {
+      throw new Error("OPERATION_NOT_ACTIVE: Challenges only permitted during active operation");
+    }
+
+    const caller = room.players.find((p) => p.sessionToken === params.sessionToken);
+    if (!caller) throw new Error("UNAUTHORIZED: Invalid operative session");
+
+    const target = room.players.find((p) => p.id === params.targetPlayerId);
+    if (!target) throw new Error("TARGET_NOT_FOUND: Target operative not found");
+
+    if (caller.id === target.id) {
+      throw new Error("INVALID_TARGET: Cannot challenge self");
+    }
+
+    if (!data.challenges[upperCode]) {
+      data.challenges[upperCode] = [];
+    }
+
+    // Check if pending challenge already exists
+    const existing = data.challenges[upperCode].find(
+      (c) => c.requesterId === caller.id && c.targetId === target.id && c.status === "PENDING"
+    );
+    if (existing) {
+      return existing;
+    }
+
+    const challenge: MoleChallenge = {
+      id: randomUUID(),
+      roomId: room.id,
+      requesterId: caller.id,
+      requesterName: caller.displayName,
+      targetId: target.id,
+      targetName: target.displayName,
+      status: "PENDING",
+      createdAt: new Date().toISOString(),
+    };
+
+    data.challenges[upperCode].push(challenge);
+    this.save(data);
+    return challenge;
+  }
+
+  public respondMoleChallenge(params: {
+    code: string;
+    sessionToken: string;
+    challengeId: string;
+    action: "ACCEPT" | "DENY";
+  }): { success: boolean; isMole: boolean; message: string } {
+    const data = this.load();
+    const upperCode = params.code.toUpperCase();
+    const room = data.rooms[upperCode];
+    if (!room) throw new Error("Room not found");
+
+    const caller = room.players.find((p) => p.sessionToken === params.sessionToken);
+    if (!caller) throw new Error("UNAUTHORIZED: Invalid operative session");
+
+    const challenges = data.challenges[upperCode] || [];
+    const challenge = challenges.find((c) => c.id === params.challengeId);
+    if (!challenge) throw new Error("CHALLENGE_NOT_FOUND: Security challenge not found");
+
+    if (challenge.targetId !== caller.id) {
+      throw new Error("UNAUTHORIZED: Challenge target mismatch");
+    }
+
+    if (challenge.status !== "PENDING") {
+      throw new Error("CHALLENGE_ALREADY_RESOLVED: Challenge has already been processed");
+    }
+
+    if (params.action === "DENY") {
+      challenge.status = "DENIED";
+      this.save(data);
+      return { success: false, isMole: false, message: "Clearance Denied: Counter-signature declined" };
+    }
+
+    const requester = room.players.find((p) => p.id === challenge.requesterId);
+    if (!requester) throw new Error("REQUESTER_NOT_FOUND: Challenging operative no longer in room");
+
+    // The core mole check: Target must have role === "MOLE" AND target.actualTeam === requester.actualTeam
+    const isAsset = caller.role === "MOLE" && caller.actualTeam === requester.actualTeam;
+
+    if (isAsset) {
+      challenge.status = "ACCEPTED";
+      if (!data.moleVerifications[upperCode]) {
+        data.moleVerifications[upperCode] = [];
+      }
+      const alreadyVerified = data.moleVerifications[upperCode].some(
+        (v) => v.requesterId === requester.id && v.moleId === caller.id
+      );
+      if (!alreadyVerified) {
+        data.moleVerifications[upperCode].push({
+          requesterId: requester.id,
+          moleId: caller.id,
+          moleName: caller.displayName,
+          verifiedAt: new Date().toISOString(),
+        });
+      }
+      this.save(data);
+      return { success: true, isMole: true, message: "Operative Verified. Channel Secured." };
+    } else {
+      challenge.status = "DENIED";
+      this.save(data);
+      return { success: false, isMole: false, message: "Clearance Denied: Invalid Counter-Signature" };
+    }
+  }
+
+  public getMoleVerifications(code: string, sessionToken: string): MoleVerification[] {
+    const data = this.load();
+    const upperCode = code.toUpperCase();
+    const room = data.rooms[upperCode];
+    if (!room) throw new Error("Room not found");
+
+    const caller = room.players.find((p) => p.sessionToken === sessionToken);
+    if (!caller) throw new Error("UNAUTHORIZED: Invalid operative session");
+
+    return (data.moleVerifications[upperCode] || []).filter((v) => v.requesterId === caller.id);
+  }
+
   public reset(): void {
-    const initial: StoreData = { rooms: {}, sessions: {}, messages: {} };
+    const initial: StoreData = {
+      rooms: {},
+      sessions: {},
+      messages: {},
+      moleVerifications: {},
+      challenges: {},
+    };
     this.save(initial);
   }
 }

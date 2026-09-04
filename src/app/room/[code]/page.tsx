@@ -41,6 +41,11 @@ export default function RoomPage() {
   const [isBurning, setIsBurning] = useState(false);
   const [burnNotice, setBurnNotice] = useState<string | null>(null);
 
+  // Mole Challenge & Verification State
+  const [isChallenging, setIsChallenging] = useState(false);
+  const [moleToast, setMoleToast] = useState<{ message: string; isMole: boolean } | null>(null);
+  const [challengeActionLoading, setChallengeActionLoading] = useState(false);
+
   const decryptTimerRef = useRef<NodeJS.Timeout | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -53,9 +58,10 @@ export default function RoomPage() {
           router.push(`/?joinCode=${code}`);
           return;
         }
-        const data = await res.json();
-        throw new Error(data.error || "Failed to load operational state");
+        const errData = await res.json();
+        throw new Error(errData.error || "Failed to load operational state");
       }
+      const data = await res.json();
       setGameState(data);
     } catch (err: any) {
       setGameState((prev) => {
@@ -201,6 +207,53 @@ export default function RoomPage() {
     }
   };
 
+  const handleInitiateChallenge = async () => {
+    if (!selectedPeerId || !code || isChallenging) return;
+    setIsChallenging(true);
+    try {
+      const res = await fetch(`/api/rooms/${code}/mole/challenge`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetPlayerId: selectedPeerId }),
+      });
+      if (res.ok) {
+        await fetchState();
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsChallenging(false);
+    }
+  };
+
+  const handleRespondChallenge = async (challengeId: string, action: "ACCEPT" | "DENY") => {
+    if (!code || challengeActionLoading) return;
+    setChallengeActionLoading(true);
+    try {
+      const res = await fetch(`/api/rooms/${code}/mole/respond`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ challengeId, action }),
+      });
+      const data = await res.json();
+      if (data.isMole) {
+        setMoleToast({ message: data.message || "Operative Verified. Channel Secured.", isMole: true });
+        setTimeout(() => setMoleToast(null), 3000);
+      } else {
+        setMoleToast({
+          message: data.message || "Clearance Denied: Invalid Counter-Signature",
+          isMole: false,
+        });
+        setTimeout(() => setMoleToast(null), 3000);
+      }
+      await fetchState();
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setChallengeActionLoading(false);
+    }
+  };
+
   const handleDecryptStart = () => {
     setIsDecrypted(true);
     if (decryptTimerRef.current) clearTimeout(decryptTimerRef.current);
@@ -273,7 +326,41 @@ export default function RoomPage() {
   });
 
   return (
-    <div className="flex-1 flex flex-col p-6 max-w-6xl mx-auto w-full">
+    <div className="flex-1 flex flex-col p-6 max-w-6xl mx-auto w-full relative">
+      {/* Mole Verification Self-Destruct Toast */}
+      {moleToast && moleToast.isMole && (
+        <div
+          id="mole-verification-toast"
+          className="fixed top-6 right-6 z-50 bg-emerald-950 border-2 border-emerald-500 text-emerald-300 px-6 py-4 shadow-2xl rounded font-mono text-sm flex items-center gap-3 animate-pulse"
+        >
+          <div className="w-3 h-3 rounded-full bg-emerald-500 animate-ping" />
+          <div>
+            <div className="font-bold text-emerald-400 uppercase tracking-widest text-xs">
+              Security Handshake Confirmed
+            </div>
+            <div className="font-semibold text-white">{moleToast.message}</div>
+            <div className="text-[10px] text-emerald-400/70 mt-1">
+              This notification will self-destruct in 3s...
+            </div>
+          </div>
+        </div>
+      )}
+
+      {moleToast && !moleToast.isMole && (
+        <div
+          id="denied-verification-toast"
+          className="fixed top-6 right-6 z-50 bg-red-950 border-2 border-red-500 text-red-300 px-6 py-4 shadow-2xl rounded font-mono text-sm flex items-center gap-3"
+        >
+          <ShieldAlert className="w-5 h-5 text-red-400" />
+          <div>
+            <div className="font-bold text-red-400 uppercase tracking-widest text-xs">
+              Security Clearance Failed
+            </div>
+            <div className="font-semibold text-white">{moleToast.message}</div>
+          </div>
+        </div>
+      )}
+
       {/* Top Intelligence Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-carbon-800 pb-4 mb-6">
         <div>
@@ -565,7 +652,51 @@ export default function RoomPage() {
           {/* INTELLIGENCE COMMUNICATIONS & FIELD SUITE */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Communication Panel (2 Columns) */}
-            <div className="lg:col-span-2 bg-carbon-900 border border-carbon-800 rounded-lg flex flex-col h-[520px]">
+            <div className="lg:col-span-2 bg-carbon-900 border border-carbon-800 rounded-lg flex flex-col h-[520px] overflow-hidden">
+              {/* Incoming Clearance Challenge Modal/Banner */}
+              {gameState?.incomingChallenges && gameState.incomingChallenges.length > 0 && (
+                <div
+                  id="clearance-challenge-modal"
+                  className="bg-amber-950/80 border-b border-amber-500/60 px-4 py-2.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs font-mono text-amber-200"
+                >
+                  <div className="flex items-center gap-2">
+                    <ShieldAlert className="w-4 h-4 text-amber-400 animate-pulse shrink-0" />
+                    <div>
+                      <span className="font-bold text-amber-400 uppercase tracking-wider">
+                        Security Clearance Challenge:
+                      </span>{" "}
+                      Received from{" "}
+                      <strong className="text-white">
+                        {gameState.incomingChallenges[0].requesterName}
+                      </strong>
+                      . Submit counter-signature?
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      id="submit-counter-signature-btn"
+                      disabled={challengeActionLoading}
+                      onClick={() =>
+                        handleRespondChallenge(gameState.incomingChallenges![0].id, "ACCEPT")
+                      }
+                      className="bg-emerald-800 hover:bg-emerald-700 text-emerald-100 font-bold px-3 py-1 rounded text-[11px] uppercase tracking-wider transition-colors border border-emerald-500 shadow"
+                    >
+                      {challengeActionLoading ? "TRANSMITTING..." : "SUBMIT COUNTER-SIGNATURE"}
+                    </button>
+                    <button
+                      id="decline-challenge-btn"
+                      disabled={challengeActionLoading}
+                      onClick={() =>
+                        handleRespondChallenge(gameState.incomingChallenges![0].id, "DENY")
+                      }
+                      className="bg-carbon-800 hover:bg-carbon-700 text-gray-300 font-bold px-2 py-1 rounded text-[11px] uppercase tracking-wider transition-colors border border-carbon-600"
+                    >
+                      DECLINE
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* Channel Tabs */}
               <div className="flex border-b border-carbon-800 bg-carbon-950/60 p-1.5 gap-1.5 font-mono text-xs">
                 <button
@@ -607,7 +738,7 @@ export default function RoomPage() {
 
               {/* Channel Sub-Header for DM View */}
               {activeTab === "DM" && (
-                <div className="border-b border-carbon-800 px-4 py-2 bg-carbon-950/40 flex items-center justify-between font-mono text-xs">
+                <div className="border-b border-carbon-800 px-4 py-2 bg-carbon-950/40 flex flex-wrap items-center justify-between gap-2 font-mono text-xs">
                   <div className="flex items-center gap-2">
                     <span className="text-gray-500 uppercase">Target Operative:</span>
                     <select
@@ -624,15 +755,71 @@ export default function RoomPage() {
                     </select>
                   </div>
 
-                  <button
-                    id="burn-dm-btn"
-                    onClick={handleBurnConversation}
-                    disabled={isBurning || !selectedPeerId}
-                    className="flex items-center gap-1 text-[11px] bg-red-950 hover:bg-red-900 text-red-300 border border-red-800 px-2.5 py-1 rounded font-bold tracking-wider uppercase transition-colors"
-                  >
-                    <Flame className="w-3.5 h-3.5 text-red-400" />
-                    {isBurning ? "BURNING..." : "BURN CONVERSATION"}
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {selectedPeerId && gameState?.verifiedAssets?.includes(selectedPeerId) ? (
+                      <span
+                        id="confirmed-asset-badge"
+                        className="flex items-center gap-1 text-[11px] bg-emerald-950 border border-emerald-500 text-emerald-300 px-2.5 py-1 rounded font-bold tracking-wider uppercase"
+                      >
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                        CONFIRMED ASSET
+                      </span>
+                    ) : selectedPeerId && gameState?.challengeStatuses?.[selectedPeerId] === "PENDING" ? (
+                      <span
+                        id="challenge-pending-badge"
+                        className="text-[11px] bg-amber-950 border border-amber-500/50 text-amber-300 px-2.5 py-1 rounded uppercase tracking-wider font-mono animate-pulse"
+                      >
+                        AWAITING RESPONSE...
+                      </span>
+                    ) : (
+                      <button
+                        id="verify-credentials-btn"
+                        onClick={handleInitiateChallenge}
+                        disabled={isChallenging || !selectedPeerId}
+                        className="flex items-center gap-1 text-[11px] bg-carbon-900 hover:bg-carbon-800 text-classified-amber border border-classified-amber/50 px-2.5 py-1 rounded font-bold tracking-wider uppercase transition-colors"
+                      >
+                        <ShieldAlert className="w-3.5 h-3.5 text-classified-amber" />
+                        {isChallenging ? "CHALLENGING..." : "VERIFY OPERATIVE CREDENTIALS"}
+                      </button>
+                    )}
+
+                    <button
+                      id="burn-dm-btn"
+                      onClick={handleBurnConversation}
+                      disabled={isBurning || !selectedPeerId}
+                      className="flex items-center gap-1 text-[11px] bg-red-950 hover:bg-red-900 text-red-300 border border-red-800 px-2.5 py-1 rounded font-bold tracking-wider uppercase transition-colors"
+                    >
+                      <Flame className="w-3.5 h-3.5 text-red-400" />
+                      {isBurning ? "BURNING..." : "BURN CONVERSATION"}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Confirmed Asset Cryptographic Receipt */}
+              {activeTab === "DM" && selectedPeerId && gameState?.verifiedAssets?.includes(selectedPeerId) && (
+                <div
+                  id="confirmed-asset-receipt"
+                  className="bg-emerald-950/70 border-b border-emerald-500/40 px-4 py-2 text-xs font-mono text-emerald-300 flex items-center justify-between"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                    <span>
+                      <strong>CONFIRMED ASSET:</strong> {activePeer?.displayName} is cryptographically verified as an embedded Mole loyal to your command.
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-emerald-400/60 uppercase tracking-widest font-bold">SECURE ASSET</span>
+                </div>
+              )}
+
+              {/* Clearance Denied Alert */}
+              {activeTab === "DM" && selectedPeerId && !gameState?.verifiedAssets?.includes(selectedPeerId) && gameState?.challengeStatuses?.[selectedPeerId] === "DENIED" && (
+                <div
+                  id="clearance-denied-badge"
+                  className="bg-red-950/50 border-b border-red-500/40 px-4 py-2 text-xs font-mono text-red-300 flex items-center gap-2"
+                >
+                  <ShieldAlert className="w-3.5 h-3.5 text-red-400 shrink-0" />
+                  <span><strong>CLEARANCE DENIED:</strong> Target operative failed counter-signature verification. Not an asset.</span>
                 </div>
               )}
 

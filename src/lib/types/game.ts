@@ -52,6 +52,24 @@ export interface SanitizedPlayer {
   role?: PlayerRole;
 }
 
+export interface MoleChallenge {
+  id: string;
+  roomId: string;
+  requesterId: string;
+  requesterName: string;
+  targetId: string;
+  targetName: string;
+  status: "PENDING" | "ACCEPTED" | "DENIED";
+  createdAt: string;
+}
+
+export interface MoleVerification {
+  requesterId: string;
+  moleId: string;
+  moleName: string;
+  verifiedAt: string;
+}
+
 export interface Room {
   id: string;
   code: string;
@@ -90,4 +108,12 @@ export interface ClientGameState {
     isHost: boolean;
   };
   players: SanitizedPlayer[];
+  verifiedAssets?: string[]; // IDs of operatives verified as moles by self
+  incomingChallenges?: {
+    id: string;
+    requesterId: string;
+    requesterName: string;
+    createdAt: string;
+  }[];
+  challengeStatuses?: Record<string, "PENDING" | "ACCEPTED" | "DENIED">; // targetId -> status
 }

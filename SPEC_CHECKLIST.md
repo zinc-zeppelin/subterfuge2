@@ -37,12 +37,12 @@ This checklist tracks implementation, code review, and playtest verification for
   - [ ] Global banner displaying the confirmed operational theme (Scheduled: Slice 6)
 
 ## 4. Covert Operations & Mole Verification
-- [ ] **Screen-Share Safe Targeted Challenge**
-  - [ ] Routine "Verify Operative Credentials" button present for all players in 1-on-1 DMs
-  - [ ] Identical challenge prompt displayed to all targeted players
-  - [ ] Non-moles receive "Clearance Denied" with no special actions
-  - [ ] Genuine moles submit counter-signature and receive a 3-second self-destruct toast
-  - [ ] Requester receives permanent cryptographic verified asset receipt
+- [x] **Screen-Share Safe Targeted Challenge**
+  - [x] Routine "Verify Operative Credentials" button present for all players in 1-on-1 DMs (Verified in Slice 4)
+  - [x] Identical challenge prompt displayed to all targeted players (Verified in Slice 4)
+  - [x] Non-moles receive "Clearance Denied" with no special actions (Verified in Slice 4)
+  - [x] Genuine moles submit counter-signature and receive a 3-second self-destruct toast (Verified in Slice 4)
+  - [x] Requester receives permanent cryptographic verified asset receipt (Verified in Slice 4)
 - [x] **Anti-Forensics**
   - [x] "Burn Conversation" button in 1-on-1 DMs to erase message history (Verified in Slice 3)
 
@@ -75,7 +75,7 @@ This checklist tracks implementation, code review, and playtest verification for
   - [x] Slice 1: Multi-context connectivity, 6-player lobby orchestration, and session verification (Passed: 11.9s)
   - [x] Slice 2: Operational deployment, balanced role matrix, secret word assignment, and anti-peeking (Passed: 6.8s)
   - [x] Slice 3: Channel isolation between Public, Team Radio, and 1-on-1 DMs, and conversation burning (Passed: 12.8s)
-  - [ ] Slice 4: Targeted Mole verification and 3s toast disappearance
+  - [x] Slice 4: Targeted Mole verification and 3s toast disappearance (Passed: 8.6s)
   - [ ] Slice 5: Midpoint declassification broadcast
   - [ ] Slice 6: 6-player verdict submission and scoring
   - [ ] Slice 7: Full end-to-end 6-player match and debrief reveal

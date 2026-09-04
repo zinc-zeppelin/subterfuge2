@@ -229,6 +229,66 @@ export class SixPlayerHarness {
   }
 
   /**
+   * Initiate clearance challenge in DM view
+   */
+  public async initiateClearanceChallenge(playerIndex: number): Promise<void> {
+    const op = this.sessions[playerIndex];
+    await op.page.click("#verify-credentials-btn");
+  }
+
+  /**
+   * Submit counter-signature on incoming challenge
+   */
+  public async submitCounterSignature(playerIndex: number): Promise<void> {
+    const op = this.sessions[playerIndex];
+    await expect(op.page.locator("#clearance-challenge-modal")).toBeVisible({ timeout: 10000 });
+    await op.page.click("#submit-counter-signature-btn");
+  }
+
+  /**
+   * Decline incoming clearance challenge
+   */
+  public async declineCounterSignature(playerIndex: number): Promise<void> {
+    const op = this.sessions[playerIndex];
+    await expect(op.page.locator("#clearance-challenge-modal")).toBeVisible({ timeout: 10000 });
+    await op.page.click("#decline-challenge-btn");
+  }
+
+  /**
+   * Assert 3-second self-destruct toast on Mole screen
+   */
+  public async expectMoleSelfDestructToast(playerIndex: number): Promise<void> {
+    const op = this.sessions[playerIndex];
+    await expect(op.page.locator("#mole-verification-toast")).toBeVisible({ timeout: 10000 });
+    await expect(op.page.locator("#mole-verification-toast")).toContainText("Operative Verified. Channel Secured.");
+  }
+
+  /**
+   * Assert self-destruct toast disappeared
+   */
+  public async expectMoleToastDisappeared(playerIndex: number): Promise<void> {
+    const op = this.sessions[playerIndex];
+    await expect(op.page.locator("#mole-verification-toast")).not.toBeVisible({ timeout: 10000 });
+  }
+
+  /**
+   * Assert denied clearance toast
+   */
+  public async expectDeniedToast(playerIndex: number): Promise<void> {
+    const op = this.sessions[playerIndex];
+    await expect(op.page.locator("#denied-verification-toast")).toBeVisible({ timeout: 10000 });
+  }
+
+  /**
+   * Assert confirmed asset receipt is displayed for requester
+   */
+  public async expectConfirmedAssetReceipt(playerIndex: number): Promise<void> {
+    const op = this.sessions[playerIndex];
+    await expect(op.page.locator("#confirmed-asset-receipt")).toBeVisible({ timeout: 10000 });
+    await expect(op.page.locator("#confirmed-asset-badge")).toBeVisible({ timeout: 10000 });
+  }
+
+  /**
    * Clean up all browser contexts
    */
   public async teardown(): Promise<void> {
