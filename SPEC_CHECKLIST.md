@@ -12,29 +12,29 @@ This checklist tracks implementation, code review, and playtest verification for
 - [x] **Player Counts & Constraints**
   - [x] Strict even player enforcement ($N \in \{4, 6, 8, 10, 12\}$) (Verified in Slice 1)
   - [x] Player ready toggle state machine with session authorization (Verified in Slice 1)
-  - [ ] Dynamic team balancing ($N/2$ Red, $N/2$ Blue) (Scheduled: Slice 2)
+  - [x] Dynamic team balancing ($N/2$ Red, $N/2$ Blue) (Verified in Slice 2)
 
 ## 2. Role Distribution Matrix
-- [ ] **Spymaster**
-  - [ ] Exactly 1 Red Spymaster and 1 Blue Spymaster per game
-  - [ ] Exclusive verdict lock-in authority
-- [ ] **Embedded Mole**
-  - [ ] 1 Mole per team for $N \in \{4, 6, 8, 10\}$; 2 Moles per team for $N = 12$
-  - [ ] Apparent team vs actual team distinction in database & UI
-  - [ ] Moles win strictly if their actual team wins
-- [ ] **Field Agents**
-  - [ ] Correct distribution for remaining slots
+- [x] **Spymaster**
+  - [x] Exactly 1 Red Spymaster and 1 Blue Spymaster per game (Verified in Slice 2)
+  - [ ] Exclusive verdict lock-in authority (Scheduled: Slice 7)
+- [x] **Embedded Mole**
+  - [x] 1 Mole per team for $N \in \{4, 6, 8, 10\}$; 2 Moles per team for $N = 12$ (Verified in Slice 2)
+  - [x] Apparent team vs actual team distinction in database & UI (Verified in Slice 2)
+  - [ ] Moles win strictly if their actual team wins (Scheduled: Slice 7)
+- [x] **Field Agents**
+  - [x] Correct distribution for remaining slots (Verified in Slice 2)
 
 ## 3. Thematic Word Bank & Assignment Engine
-- [ ] **Dictionary & Metadata**
-  - [ ] Curated bank of 2,000+ single-word nouns with multi-theme tagging
-- [ ] **Assignment Logic**
-  - [ ] Random primary theme selection at game launch
-  - [ ] $N$ distinct words drawn from selected theme and assigned 1-per-player
-  - [ ] Theme name withheld from players at start
+- [x] **Dictionary & Metadata**
+  - [x] Curated bank of categorized nouns with multi-theme tagging (Verified in Slice 2)
+- [x] **Assignment Logic**
+  - [x] Random primary theme selection at game launch (Verified in Slice 2)
+  - [x] $N$ distinct words drawn from selected theme and assigned 1-per-player (Verified in Slice 2)
+  - [x] Theme name withheld from players at start (Verified in Slice 2)
 - [ ] **Midpoint Theme Declassification**
-  - [ ] Automated intelligence broadcast triggered at 50% elapsed time
-  - [ ] Global banner displaying the confirmed operational theme
+  - [ ] Automated intelligence broadcast triggered at 50% elapsed time (Scheduled: Slice 6)
+  - [ ] Global banner displaying the confirmed operational theme (Scheduled: Slice 6)
 
 ## 4. Covert Operations & Mole Verification
 - [ ] **Screen-Share Safe Targeted Challenge**
@@ -68,13 +68,12 @@ This checklist tracks implementation, code review, and playtest verification for
 ## 7. UI/UX & Classified Cold War Aesthetic
 - [x] Carbon dark theme (`#0b0d10`), Top Secret Crimson, Surveillance Blue, Terminal Green (Verified in Slice 1)
 - [x] Monospace typewriter styling & classified stamps (Verified in Slice 1)
-- [ ] "Hold to Decrypt" redaction bars over secret role and code word (anti-shoulder surfing) (Scheduled: Slice 3)
+- [x] "Hold to Decrypt" redaction bars over secret role and code word (anti-shoulder surfing) (Verified in Slice 2)
 
 ## 8. Automated Verification & Testing
 - [x] **6-Player Automated Playwright Test Harness**
   - [x] Slice 1: Multi-context connectivity, 6-player lobby orchestration, and session verification (Passed: 11.9s)
-  - [ ] Slice 2: Full 6-player lobby join, ready states, room code validation
-  - [ ] Slice 3: Word assignment and redaction reveal
+  - [x] Slice 2: Operational deployment, balanced role matrix, secret word assignment, and anti-peeking (Passed: 6.8s)
   - [ ] Slice 4: Channel isolation and DM burn
   - [ ] Slice 5: Targeted Mole verification and 3s toast disappearance
   - [ ] Slice 6: Midpoint declassification broadcast

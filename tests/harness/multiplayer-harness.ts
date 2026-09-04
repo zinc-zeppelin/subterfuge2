@@ -116,6 +116,63 @@ export class SixPlayerHarness {
   }
 
   /**
+   * Operative 0 (Host) clicks the button to authorize deployment and commence operation
+   */
+  public async hostStartsOperation(): Promise<void> {
+    const host = this.sessions[0];
+    await host.page.click("#start-operation-btn");
+  }
+
+  /**
+   * Assert that all 6 browser contexts see the INFILTRATION phase badge
+   */
+  public async expectAllInInfiltrationPhase(): Promise<void> {
+    for (const op of this.sessions) {
+      await expect(op.page.locator("#room-phase-badge")).toHaveText("INFILTRATION", {
+        timeout: 10000,
+      });
+    }
+  }
+
+  /**
+   * Click hold-to-decrypt button and retrieve the assigned secret code word
+   */
+  public async decryptAndGetSecretWord(playerIndex: number): Promise<string> {
+    const op = this.sessions[playerIndex];
+    // Initially word should be redacted
+    await expect(op.page.locator("#self-word-redacted")).toBeVisible();
+
+    // Click decrypt button
+    await op.page.click("#decrypt-word-btn");
+
+    // Decrypted word should appear
+    const wordLocator = op.page.locator("#self-assigned-word");
+    await expect(wordLocator).toBeVisible();
+    const word = await wordLocator.innerText();
+    return word.trim();
+  }
+
+  /**
+   * Get an operative's classified dossier info
+   */
+  public async getPlayerDossier(playerIndex: number): Promise<{
+    apparentTeam: string;
+    actualTeam: string;
+    role: string;
+  }> {
+    const op = this.sessions[playerIndex];
+    const apparentText = await op.page.locator("#self-apparent-team").innerText();
+    const actualText = await op.page.locator("#self-actual-team").innerText();
+    const roleText = await op.page.locator("#self-role").innerText();
+
+    return {
+      apparentTeam: apparentText.includes("RED") ? "RED" : "BLUE",
+      actualTeam: actualText.includes("RED") ? "RED" : "BLUE",
+      role: roleText.trim(),
+    };
+  }
+
+  /**
    * Clean up all browser contexts
    */
   public async teardown(): Promise<void> {

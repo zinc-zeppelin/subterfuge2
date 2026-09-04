@@ -17,6 +17,7 @@ export interface Player {
   apparentTeam?: TeamColor;
   actualTeam?: TeamColor;
   role?: PlayerRole;
+  assignedWord?: string;
   isReady: boolean;
   isHost: boolean;
   createdAt: string;
@@ -50,6 +51,7 @@ export interface Room {
   endTime?: string;
   createdAt: string;
   players: Player[];
+  codebook?: Record<string, string>; // playerId -> assignedWord
 }
 
 export interface ClientGameState {

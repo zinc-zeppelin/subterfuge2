@@ -1,4 +1,5 @@
 import { Room, Player, ClientGameState, SanitizedPlayer } from "../types/game";
+import { getRandomTheme, drawWordsForTheme } from "../data/word-bank";
 import { randomUUID } from "crypto";
 import fs from "fs";
 import path from "path";
@@ -168,6 +169,111 @@ class GameStore {
     return player;
   }
 
+  public startOperation(code: string, sessionToken: string): Room {
+    const data = this.load();
+    const upperCode = code.toUpperCase();
+    const room = data.rooms[upperCode];
+    if (!room) throw new Error("Room not found");
+
+    const host = room.players.find((p) => p.id === room.hostId);
+    if (!host || host.sessionToken !== sessionToken) {
+      throw new Error("UNAUTHORIZED: Only the Operation Commander can authorize deployment");
+    }
+
+    if (room.phase !== "LOBBY") {
+      throw new Error("OPERATION_ALREADY_ACTIVE: Operation is already in progress");
+    }
+
+    const n = room.players.length;
+    if (n < 4 || n > 12 || n % 2 !== 0) {
+      throw new Error(`INVALID_ROSTER_COUNT: Required 4-12 even players. Current: ${n}`);
+    }
+
+    const allReady = room.players.every((p) => p.isReady);
+    if (!allReady) {
+      throw new Error("NOT_READY: All operatives must declare readiness before deployment");
+    }
+
+    // 1. Shuffle players to randomize team assignments
+    const shuffled = [...room.players];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+
+    const half = n / 2;
+    const redPlayers = shuffled.slice(0, half);
+    const bluePlayers = shuffled.slice(half);
+
+    // Moles per team: 2 moles each at 12 players, otherwise 1 mole each
+    const moleCount = n === 12 ? 2 : 1;
+
+    // Assign Red Team:
+    // redPlayers[0] -> Spymaster (loyal)
+    // redPlayers[1..moleCount] -> Mole (apparent Red, actual Blue)
+    // Remaining -> Agent (loyal)
+    redPlayers[0].apparentTeam = "RED";
+    redPlayers[0].actualTeam = "RED";
+    redPlayers[0].role = "SPYMASTER";
+
+    for (let i = 1; i <= moleCount; i++) {
+      redPlayers[i].apparentTeam = "RED";
+      redPlayers[i].actualTeam = "BLUE";
+      redPlayers[i].role = "MOLE";
+    }
+
+    for (let i = 1 + moleCount; i < redPlayers.length; i++) {
+      redPlayers[i].apparentTeam = "RED";
+      redPlayers[i].actualTeam = "RED";
+      redPlayers[i].role = "AGENT";
+    }
+
+    // Assign Blue Team:
+    // bluePlayers[0] -> Spymaster (loyal)
+    // bluePlayers[1..moleCount] -> Mole (apparent Blue, actual Red)
+    // Remaining -> Agent (loyal)
+    bluePlayers[0].apparentTeam = "BLUE";
+    bluePlayers[0].actualTeam = "BLUE";
+    bluePlayers[0].role = "SPYMASTER";
+
+    for (let i = 1; i <= moleCount; i++) {
+      bluePlayers[i].apparentTeam = "BLUE";
+      bluePlayers[i].actualTeam = "RED";
+      bluePlayers[i].role = "MOLE";
+    }
+
+    for (let i = 1 + moleCount; i < bluePlayers.length; i++) {
+      bluePlayers[i].apparentTeam = "BLUE";
+      bluePlayers[i].actualTeam = "BLUE";
+      bluePlayers[i].role = "AGENT";
+    }
+
+    // 2. Select Secret Theme and Draw N unique words
+    const theme = getRandomTheme();
+    const words = drawWordsForTheme(theme, n);
+    room.selectedTheme = theme;
+    room.codebook = {};
+
+    // Assign 1 word per player
+    for (let i = 0; i < room.players.length; i++) {
+      const player = room.players[i];
+      const word = words[i];
+      player.assignedWord = word;
+      room.codebook[player.id] = word;
+    }
+
+    // 3. Operational Timers
+    const now = new Date();
+    room.startTime = now.toISOString();
+    const durationMs = (room.durationHours || 24) * 60 * 60 * 1000;
+    room.midpointTime = new Date(now.getTime() + durationMs / 2).toISOString();
+    room.endTime = new Date(now.getTime() + durationMs).toISOString();
+    room.phase = "INFILTRATION";
+
+    this.save(data);
+    return room;
+  }
+
   public getClientGameState(code: string, sessionToken: string): ClientGameState {
     const data = this.load();
     const upperCode = code.toUpperCase();
@@ -189,6 +295,10 @@ class GameStore {
       role: isDebrief ? p.role : undefined,
     }));
 
+    const now = new Date();
+    const midpointPassed =
+      room.midpointTime && now.getTime() >= new Date(room.midpointTime).getTime();
+
     return {
       room: {
         code: room.code,
@@ -198,7 +308,7 @@ class GameStore {
         startTime: room.startTime,
         midpointTime: room.midpointTime,
         endTime: room.endTime,
-        declassifiedTheme: undefined,
+        declassifiedTheme: midpointPassed ? room.selectedTheme : undefined,
       },
       self: {
         id: self.id,
@@ -206,6 +316,7 @@ class GameStore {
         apparentTeam: self.apparentTeam,
         actualTeam: self.actualTeam,
         role: self.role,
+        assignedWord: self.assignedWord,
         isReady: self.isReady,
         isHost: self.isHost,
       },
