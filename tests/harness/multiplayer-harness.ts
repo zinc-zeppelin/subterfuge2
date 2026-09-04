@@ -329,6 +329,40 @@ export class SixPlayerHarness {
   }
 
   /**
+   * Propose a word on team's collaborative verdict board
+   */
+  public async proposeWord(playerIndex: number, word: string): Promise<void> {
+    const op = this.sessions[playerIndex];
+    await op.page.fill("#proposal-word-input", word);
+    await op.page.click("#propose-word-btn");
+  }
+
+  /**
+   * Spymaster adds a word directly to their official draft
+   */
+  public async spymasterAddGuess(playerIndex: number, word: string): Promise<void> {
+    const op = this.sessions[playerIndex];
+    await op.page.fill("#spymaster-word-input", word);
+    await op.page.click("#add-guess-btn");
+  }
+
+  /**
+   * Spymaster submits official verdict
+   */
+  public async spymasterSubmitVerdict(playerIndex: number): Promise<void> {
+    const op = this.sessions[playerIndex];
+    await op.page.click("#lock-in-verdict-btn");
+  }
+
+  /**
+   * Assert verdict is locked in
+   */
+  public async expectVerdictLocked(playerIndex: number): Promise<void> {
+    const op = this.sessions[playerIndex];
+    await expect(op.page.locator("#verdict-locked-badge")).toBeVisible({ timeout: 10000 });
+  }
+
+  /**
    * Clean up all browser contexts
    */
   public async teardown(): Promise<void> {

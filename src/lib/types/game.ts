@@ -70,6 +70,27 @@ export interface MoleVerification {
   verifiedAt: string;
 }
 
+export interface WordSuggestion {
+  id: string;
+  word: string;
+  suggestedBy: string;
+  suggestedById: string;
+  votes: string[]; // player IDs who upvoted
+  createdAt: string;
+}
+
+export interface TeamVerdict {
+  team: TeamColor;
+  submittedBy: string;
+  submittedByName: string;
+  guesses: string[];
+  moleIndictmentId?: string;
+  moleIndictmentName?: string;
+  score?: number;
+  correctGuesses?: string[];
+  submittedAt: string;
+}
+
 export interface Room {
   id: string;
   code: string;
@@ -85,6 +106,9 @@ export interface Room {
   createdAt: string;
   players: Player[];
   codebook?: Record<string, string>; // playerId -> assignedWord
+  suggestions?: Record<TeamColor, WordSuggestion[]>;
+  verdicts?: Record<TeamColor, TeamVerdict>;
+  winner?: TeamColor | "DRAW";
 }
 
 export interface ClientGameState {
@@ -98,6 +122,7 @@ export interface ClientGameState {
     endTime?: string;
     verdictEndTime?: string;
     declassifiedTheme?: string; // only populated after midpoint
+    winner?: TeamColor | "DRAW";
   };
   self: {
     id: string;
@@ -118,4 +143,8 @@ export interface ClientGameState {
     createdAt: string;
   }[];
   challengeStatuses?: Record<string, "PENDING" | "ACCEPTED" | "DENIED">; // targetId -> status
+  teamSuggestions?: WordSuggestion[];
+  teamVerdict?: TeamVerdict;
+  allVerdicts?: Record<TeamColor, TeamVerdict>; // only in DEBRIEF
+  codebook?: Record<string, string>; // only in DEBRIEF
 }

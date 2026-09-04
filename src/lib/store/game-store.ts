@@ -7,6 +7,8 @@ import {
   ChannelType,
   MoleChallenge,
   MoleVerification,
+  WordSuggestion,
+  TeamVerdict,
 } from "../types/game";
 import { getRandomTheme, drawWordsForTheme } from "../data/word-bank";
 import { randomUUID } from "crypto";
@@ -347,6 +349,7 @@ class GameStore {
         endTime: room.endTime,
         verdictEndTime: room.verdictEndTime,
         declassifiedTheme: midpointPassed ? room.selectedTheme : undefined,
+        winner: room.winner,
       },
       self: {
         id: self.id,
@@ -379,6 +382,15 @@ class GameStore {
           });
         return statuses;
       })(),
+      teamSuggestions:
+        self.apparentTeam && room.suggestions?.[self.apparentTeam]
+          ? [...room.suggestions[self.apparentTeam]].sort((a, b) => b.votes.length - a.votes.length)
+          : [],
+      teamVerdict: self.apparentTeam && room.verdicts?.[self.apparentTeam]
+        ? room.verdicts[self.apparentTeam]
+        : undefined,
+      allVerdicts: isDebrief ? room.verdicts : undefined,
+      codebook: isDebrief ? room.codebook : undefined,
     };
   }
 
@@ -670,6 +682,200 @@ class GameStore {
 
     this.save(data);
     return room;
+  }
+
+  public addWordSuggestion(params: {
+    code: string;
+    sessionToken: string;
+    word: string;
+  }): WordSuggestion {
+    const data = this.load();
+    const upperCode = params.code.toUpperCase();
+    const room = data.rooms[upperCode];
+    if (!room) throw new Error("Room not found");
+
+    if (room.phase !== "INFILTRATION" && room.phase !== "VERDICT") {
+      throw new Error("OPERATION_NOT_ACTIVE: Suggestions only permitted during active operation");
+    }
+
+    const caller = room.players.find((p) => p.sessionToken === params.sessionToken);
+    if (!caller || !caller.apparentTeam) throw new Error("UNAUTHORIZED: Invalid operative session");
+
+    const cleanWord = params.word.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+    if (!cleanWord) throw new Error("INVALID_WORD: Candidate word must be alphanumeric");
+
+    if (!room.suggestions) {
+      room.suggestions = { RED: [], BLUE: [] };
+    }
+    if (!room.suggestions[caller.apparentTeam]) {
+      room.suggestions[caller.apparentTeam] = [];
+    }
+
+    // Check if word already suggested
+    const existing = room.suggestions[caller.apparentTeam].find(
+      (s) => s.word.toUpperCase() === cleanWord
+    );
+    if (existing) {
+      if (!existing.votes.includes(caller.id)) {
+        existing.votes.push(caller.id);
+      }
+      this.save(data);
+      return existing;
+    }
+
+    const suggestion: WordSuggestion = {
+      id: randomUUID(),
+      word: cleanWord,
+      suggestedBy: caller.displayName,
+      suggestedById: caller.id,
+      votes: [caller.id],
+      createdAt: new Date().toISOString(),
+    };
+
+    room.suggestions[caller.apparentTeam].push(suggestion);
+    this.save(data);
+    return suggestion;
+  }
+
+  public voteWordSuggestion(params: {
+    code: string;
+    sessionToken: string;
+    suggestionId: string;
+  }): WordSuggestion {
+    const data = this.load();
+    const upperCode = params.code.toUpperCase();
+    const room = data.rooms[upperCode];
+    if (!room) throw new Error("Room not found");
+
+    const caller = room.players.find((p) => p.sessionToken === params.sessionToken);
+    if (!caller || !caller.apparentTeam) throw new Error("UNAUTHORIZED: Invalid operative session");
+
+    if (!room.suggestions || !room.suggestions[caller.apparentTeam]) {
+      throw new Error("SUGGESTION_NOT_FOUND: No proposals found for team");
+    }
+
+    const suggestion = room.suggestions[caller.apparentTeam].find((s) => s.id === params.suggestionId);
+    if (!suggestion) throw new Error("SUGGESTION_NOT_FOUND: Proposal not found");
+
+    const voteIdx = suggestion.votes.indexOf(caller.id);
+    if (voteIdx >= 0) {
+      suggestion.votes.splice(voteIdx, 1);
+    } else {
+      suggestion.votes.push(caller.id);
+    }
+
+    this.save(data);
+    return suggestion;
+  }
+
+  public submitTeamVerdict(params: {
+    code: string;
+    sessionToken: string;
+    guesses: string[];
+    moleIndictmentId?: string;
+  }): { verdict: TeamVerdict; room: Room } {
+    const data = this.load();
+    const upperCode = params.code.toUpperCase();
+    const room = data.rooms[upperCode];
+    if (!room) throw new Error("Room not found");
+
+    if (room.phase !== "VERDICT") {
+      throw new Error("INVALID_PHASE: Verdict submissions are only permitted during the VERDICT phase");
+    }
+
+    const caller = room.players.find((p) => p.sessionToken === params.sessionToken);
+    if (!caller || !caller.apparentTeam) throw new Error("UNAUTHORIZED: Invalid operative session");
+
+    if (caller.role !== "SPYMASTER") {
+      throw new Error("UNAUTHORIZED: Only the designated Spymaster holds exclusive lock-in authority");
+    }
+
+    const team = caller.apparentTeam;
+    const n = room.players.length;
+
+    // Clean and deduplicate guesses
+    const cleanedGuesses: string[] = [];
+    for (const g of params.guesses) {
+      const clean = g.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+      if (clean && !cleanedGuesses.includes(clean)) {
+        cleanedGuesses.push(clean);
+      }
+    }
+
+    if (cleanedGuesses.length > n) {
+      throw new Error(`GUESS_LIMIT_EXCEEDED: Cannot submit more than ${n} code word guesses`);
+    }
+
+    // Codebook target words
+    const targetWords = Object.values(room.codebook || {}).map((w) =>
+      w.trim().toUpperCase().replace(/[^A-Z0-9]/g, "")
+    );
+
+    const correctGuesses = cleanedGuesses.filter((g) => targetWords.includes(g));
+    const score = correctGuesses.length;
+
+    let moleIndictmentName: string | undefined;
+    if (params.moleIndictmentId) {
+      const indicted = room.players.find((p) => p.id === params.moleIndictmentId);
+      if (indicted) {
+        moleIndictmentName = indicted.displayName;
+      }
+    }
+
+    const verdict: TeamVerdict = {
+      team,
+      submittedBy: caller.id,
+      submittedByName: caller.displayName,
+      guesses: cleanedGuesses,
+      moleIndictmentId: params.moleIndictmentId,
+      moleIndictmentName,
+      score,
+      correctGuesses,
+      submittedAt: new Date().toISOString(),
+    };
+
+    if (!room.verdicts) {
+      room.verdicts = { RED: undefined as any, BLUE: undefined as any };
+    }
+    room.verdicts[team] = verdict;
+
+    // Check if BOTH teams have submitted
+    const red = room.verdicts["RED"];
+    const blue = room.verdicts["BLUE"];
+
+    if (red && blue) {
+      let redScore = red.score || 0;
+      let blueScore = blue.score || 0;
+
+      // Tiebreaker resolution: Mole Indictments (+2 points for correctly identifying a Mole)
+      if (redScore === blueScore) {
+        if (red.moleIndictmentId) {
+          const indictedByRed = room.players.find((p) => p.id === red.moleIndictmentId);
+          if (indictedByRed && indictedByRed.role === "MOLE") {
+            redScore += 2;
+          }
+        }
+        if (blue.moleIndictmentId) {
+          const indictedByBlue = room.players.find((p) => p.id === blue.moleIndictmentId);
+          if (indictedByBlue && indictedByBlue.role === "MOLE") {
+            blueScore += 2;
+          }
+        }
+      }
+
+      if (redScore > blueScore) {
+        room.winner = "RED";
+      } else if (blueScore > redScore) {
+        room.winner = "BLUE";
+      } else {
+        room.winner = "DRAW";
+      }
+
+      room.phase = "DEBRIEF";
+    }
+
+    this.save(data);
+    return { verdict, room };
   }
 
   public reset(): void {

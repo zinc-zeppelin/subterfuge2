@@ -56,14 +56,14 @@ This checklist tracks implementation, code review, and playtest verification for
   - [x] Server-side channel access enforcement (clients cannot read unauthorized messages) (Verified in Slice 3)
 
 ## 6. Endgame Verdicts & Scoring (+1 / 0)
-- [ ] **Verdict Deliberation**
-  - [ ] 1-Hour Verdict Phase countdown upon main timer expiry
-  - [ ] Collaborative team proposal board (upvoting / suggesting words)
-- [ ] **Submission & Scoring**
-  - [ ] Spymaster lock-in mechanism (capped at $N$ words)
-  - [ ] Must guess all $N$ words (including own team members' words)
-  - [ ] Scoring engine: $+1$ per correct word, $0$ for incorrect guesses
-  - [ ] Tiebreaker: Mole indictment (+2 points) / Draw resolution
+- [x] **Verdict Deliberation**
+  - [x] 1-Hour Verdict Phase countdown upon main timer expiry (Verified in Slice 5)
+  - [x] Collaborative team proposal board (upvoting / suggesting words) (Verified in Slice 6)
+- [x] **Submission & Scoring**
+  - [x] Spymaster lock-in mechanism (capped at $N$ words) (Verified in Slice 6)
+  - [x] Must guess all $N$ words (including own team members' words) (Verified in Slice 6)
+  - [x] Scoring engine: $+1$ per correct word, $0$ for incorrect guesses (Verified in Slice 6)
+  - [x] Tiebreaker: Mole indictment (+2 points) / Draw resolution (Verified in Slice 6)
 
 ## 7. UI/UX & Classified Cold War Aesthetic
 - [x] Carbon dark theme (`#0b0d10`), Top Secret Crimson, Surveillance Blue, Terminal Green (Verified in Slice 1)
@@ -77,5 +77,5 @@ This checklist tracks implementation, code review, and playtest verification for
   - [x] Slice 3: Channel isolation between Public, Team Radio, and 1-on-1 DMs, and conversation burning (Passed: 12.8s)
   - [x] Slice 4: Targeted Mole verification and 3s toast disappearance (Passed: 8.6s)
   - [x] Slice 5: Midpoint declassification broadcast and phase shift (Passed: 8.8s)
-  - [ ] Slice 6: 6-player verdict submission and scoring
+  - [x] Slice 6: 6-player verdict submission and scoring (Passed: 12.6s)
   - [ ] Slice 7: Full end-to-end 6-player match and debrief reveal

@@ -50,6 +50,15 @@ export default function RoomPage() {
   const [timeLeft, setTimeLeft] = useState<string>("--:--:--");
   const [midpointLeft, setMidpointLeft] = useState<string | null>(null);
 
+  // Verdict Deliberation & Spymaster Lock-In State
+  const [proposalInput, setProposalInput] = useState("");
+  const [isProposing, setIsProposing] = useState(false);
+  const [spymasterWordInput, setSpymasterWordInput] = useState("");
+  const [spymasterGuesses, setSpymasterGuesses] = useState<string[]>([]);
+  const [moleIndictmentId, setMoleIndictmentId] = useState<string>("");
+  const [isSubmittingVerdict, setIsSubmittingVerdict] = useState(false);
+  const [verdictError, setVerdictError] = useState<string | null>(null);
+
   const decryptTimerRef = useRef<NodeJS.Timeout | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -300,6 +309,84 @@ export default function RoomPage() {
     }
   };
 
+  const handleProposeWord = async () => {
+    if (!code || !proposalInput.trim() || isProposing) return;
+    setIsProposing(true);
+    try {
+      const res = await fetch(`/api/rooms/${code}/verdict/suggest`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ word: proposalInput }),
+      });
+      if (res.ok) {
+        setProposalInput("");
+        await fetchState();
+      }
+    } finally {
+      setIsProposing(false);
+    }
+  };
+
+  const handleVoteSuggestion = async (suggestionId: string) => {
+    if (!code) return;
+    try {
+      const res = await fetch(`/api/rooms/${code}/verdict/vote`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ suggestionId }),
+      });
+      if (res.ok) {
+        await fetchState();
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleAddSpymasterGuess = (wordToAdd?: string) => {
+    const raw = wordToAdd || spymasterWordInput;
+    const word = raw.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+    if (!word) return;
+    if (!spymasterGuesses.includes(word)) {
+      if (spymasterGuesses.length >= (gameState?.players.length || 6)) {
+        setVerdictError(`Cannot add more than ${gameState?.players.length} code words.`);
+        return;
+      }
+      setSpymasterGuesses((prev) => [...prev, word]);
+      setVerdictError(null);
+      if (!wordToAdd) setSpymasterWordInput("");
+    }
+  };
+
+  const handleRemoveSpymasterGuess = (wordToRemove: string) => {
+    setSpymasterGuesses((prev) => prev.filter((w) => w !== wordToRemove));
+  };
+
+  const handleSubmitVerdict = async () => {
+    if (!code || isSubmittingVerdict || spymasterGuesses.length === 0) return;
+    setIsSubmittingVerdict(true);
+    setVerdictError(null);
+    try {
+      const res = await fetch(`/api/rooms/${code}/verdict/submit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          guesses: spymasterGuesses,
+          moleIndictmentId: moleIndictmentId || undefined,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to lock in verdict");
+      }
+      await fetchState();
+    } catch (err: any) {
+      setVerdictError(err.message);
+    } finally {
+      setIsSubmittingVerdict(false);
+    }
+  };
+
   const handleDecryptStart = () => {
     setIsDecrypted(true);
     if (decryptTimerRef.current) clearTimeout(decryptTimerRef.current);
@@ -511,7 +598,7 @@ export default function RoomPage() {
       )}
 
       {/* PHASE 1: LOBBY VIEW */}
-      {!isInfiltration ? (
+      {room.phase === "LOBBY" ? (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Operative Roster Panel */}
           <div className="lg:col-span-2 bg-carbon-900 border border-carbon-800 rounded-lg p-6">
@@ -760,6 +847,262 @@ export default function RoomPage() {
               </div>
             </div>
           </div>
+
+          {/* CLASSIFIED TEAM VERDICT DELIBERATION BOARD */}
+          {room.phase === "VERDICT" && (
+            <div
+              id="verdict-board"
+              className={`mb-6 p-6 rounded-lg border font-mono ${
+                self.apparentTeam === "RED"
+                  ? "bg-red-950/20 border-red-800/80 shadow-red-950/40"
+                  : "bg-blue-950/20 border-blue-800/80 shadow-blue-950/40"
+              } shadow-2xl`}
+            >
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-carbon-800 pb-3 mb-4">
+                <div>
+                  <h2 className="text-base font-bold uppercase tracking-wider text-white flex items-center gap-2">
+                    <span
+                      className={`inline-block w-3 h-3 rounded-full ${
+                        self.apparentTeam === "RED" ? "bg-red-500" : "bg-blue-500"
+                      }`}
+                    />
+                    TEAM VERDICT DELIBERATION // {self.apparentTeam} COMMAND
+                  </h2>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    Target: Assemble all {players.length} global code words. Score: +1 per correct word, 0 for incorrect guesses.
+                  </p>
+                </div>
+                <div className="text-xs text-right">
+                  <span className="text-gray-500">MAX GUESSES: </span>
+                  <strong className="text-classified-amber">{players.length} WORDS</strong>
+                </div>
+              </div>
+
+              {/* Already Submitted Verdict Display */}
+              {gameState?.teamVerdict ? (
+                <div
+                  id="verdict-locked-badge"
+                  className="p-4 bg-emerald-950/80 border border-emerald-500 rounded text-emerald-300 mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="w-3 h-3 rounded-full bg-emerald-400 animate-ping shrink-0"></span>
+                    <div>
+                      <div className="font-bold uppercase tracking-wider text-xs text-emerald-400">
+                        OFFICIAL VERDICT LOCKED IN
+                      </div>
+                      <div className="text-sm">
+                        Submitted by Spymaster <strong>{gameState.teamVerdict.submittedByName}</strong>. Awaiting opponent command...
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5" id="locked-guesses-list">
+                    {gameState.teamVerdict.guesses.map((g, i) => (
+                      <span
+                        key={i}
+                        className="bg-emerald-900/60 border border-emerald-600 text-emerald-200 px-2 py-0.5 rounded text-xs font-bold uppercase"
+                      >
+                        {g}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {/* Spymaster Lock-In Control vs Field Operative Status */}
+                  {self.role === "SPYMASTER" ? (
+                    <div className="p-4 bg-carbon-950 border border-classified-amber/50 rounded mb-6 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold uppercase tracking-wider text-classified-amber flex items-center gap-1.5">
+                          ★ SPYMASTER EXCLUSIVE LOCK-IN AUTHORITY
+                        </span>
+                        <span id="guesses-count" className="text-xs font-mono text-gray-400">
+                          SELECTED: <strong className="text-white">{spymasterGuesses.length}/{players.length}</strong>
+                        </span>
+                      </div>
+
+                      {/* Add Word Input */}
+                      <div className="flex gap-2">
+                        <input
+                          id="spymaster-word-input"
+                          type="text"
+                          value={spymasterWordInput}
+                          onChange={(e) => setSpymasterWordInput(e.target.value)}
+                          onKeyDown={(e) => e.key === "Enter" && handleAddSpymasterGuess()}
+                          placeholder="Enter candidate code word..."
+                          className="flex-1 bg-carbon-900 border border-carbon-700 rounded px-3 py-2 text-xs text-white uppercase focus:outline-none focus:border-classified-amber"
+                        />
+                        <button
+                          id="add-guess-btn"
+                          onClick={() => handleAddSpymasterGuess()}
+                          className="bg-carbon-800 hover:bg-carbon-700 text-classified-amber border border-classified-amber/40 px-3 py-2 rounded text-xs font-bold uppercase tracking-wider"
+                        >
+                          + ADD GUESS
+                        </button>
+                      </div>
+
+                      {/* Draft Guesses Badges */}
+                      <div className="flex flex-wrap gap-2 min-h-[36px] p-2 bg-carbon-900/60 rounded border border-carbon-800" id="draft-guesses-container">
+                        {spymasterGuesses.length === 0 ? (
+                          <span className="text-xs text-gray-600 italic">No code words added to official verdict yet. Add words or click candidate words below.</span>
+                        ) : (
+                          spymasterGuesses.map((w) => (
+                            <span
+                              key={w}
+                              id={`draft-guess-${w.toLowerCase()}`}
+                              className="bg-carbon-800 border border-classified-amber/60 text-classified-amber text-xs px-2.5 py-1 rounded flex items-center gap-1.5 font-bold uppercase shadow"
+                            >
+                              {w}
+                              <button
+                                onClick={() => handleRemoveSpymasterGuess(w)}
+                                className="text-gray-400 hover:text-red-400 font-bold ml-1"
+                              >
+                                ×
+                              </button>
+                            </span>
+                          ))
+                        )}
+                      </div>
+
+                      {/* Tiebreaker Mole Indictment */}
+                      <div className="pt-2 border-t border-carbon-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="flex items-center gap-2">
+                          <label htmlFor="mole-indictment-select" className="text-xs text-gray-400 uppercase">
+                            Mole Indictment (+2 Tiebreaker):
+                          </label>
+                          <select
+                            id="mole-indictment-select"
+                            value={moleIndictmentId}
+                            onChange={(e) => setMoleIndictmentId(e.target.value)}
+                            className="bg-carbon-900 border border-carbon-700 text-xs text-classified-amber rounded px-2 py-1 font-mono uppercase"
+                          >
+                            <option value="">-- No Indictment --</option>
+                            {players
+                              .filter((p) => p.apparentTeam !== self.apparentTeam)
+                              .map((p) => (
+                                <option key={p.id} value={p.id}>
+                                  {p.displayName} (OPPOSING {p.apparentTeam})
+                                </option>
+                              ))}
+                          </select>
+                        </div>
+
+                        <button
+                          id="lock-in-verdict-btn"
+                          disabled={isSubmittingVerdict || spymasterGuesses.length === 0}
+                          onClick={handleSubmitVerdict}
+                          className="bg-classified-crimson hover:bg-red-700 disabled:opacity-50 text-white font-bold px-5 py-2.5 rounded text-xs uppercase tracking-widest transition-colors shadow-lg border border-red-500 flex items-center justify-center gap-2"
+                        >
+                          <Lock className="w-3.5 h-3.5" />
+                          {isSubmittingVerdict ? "TRANSMITTING VERDICT..." : "LOCK IN OFFICIAL VERDICT"}
+                        </button>
+                      </div>
+
+                      {verdictError && (
+                        <div className="text-xs text-red-400 bg-red-950/60 border border-red-800 p-2 rounded">
+                          {verdictError}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div
+                      id="awaiting-spymaster-notice"
+                      className="p-3.5 bg-carbon-950 border border-carbon-800 rounded text-xs text-gray-400 mb-6 flex items-center gap-3"
+                    >
+                      <Lock className="w-4 h-4 text-classified-amber shrink-0" />
+                      <span>
+                        <strong>AWAITING SPYMASTER LOCK-IN:</strong> Only your designated Spymaster can authorize the final verdict. Propose words below and vote on team suggestions to assist their assembly.
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Collaborative Proposal Board */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold uppercase tracking-wider text-gray-300">
+                        COLLABORATIVE TEAM PROPOSALS
+                      </span>
+                      <span className="text-[11px] text-gray-500">
+                        {gameState?.teamSuggestions?.length || 0} WORDS ON BOARD
+                      </span>
+                    </div>
+
+                    <div className="flex gap-2">
+                      <input
+                        id="proposal-word-input"
+                        type="text"
+                        value={proposalInput}
+                        onChange={(e) => setProposalInput(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && handleProposeWord()}
+                        placeholder="Suggest candidate word..."
+                        className="flex-1 bg-carbon-900 border border-carbon-700 rounded px-3 py-1.5 text-xs text-white uppercase focus:outline-none focus:border-classified-amber font-mono"
+                      />
+                      <button
+                        id="propose-word-btn"
+                        disabled={isProposing || !proposalInput.trim()}
+                        onClick={handleProposeWord}
+                        className="bg-carbon-800 hover:bg-carbon-700 text-white border border-carbon-600 px-3 py-1.5 rounded text-xs font-bold uppercase tracking-wider"
+                      >
+                        {isProposing ? "ADDING..." : "+ PROPOSE WORD"}
+                      </button>
+                    </div>
+
+                    {/* Suggestions List */}
+                    <div className="space-y-2 mt-3" id="suggestions-list">
+                      {!gameState?.teamSuggestions || gameState.teamSuggestions.length === 0 ? (
+                        <div className="text-center py-4 text-gray-600 text-xs italic">
+                          No candidate words suggested yet. Type a word above to propose it to your team.
+                        </div>
+                      ) : (
+                        gameState.teamSuggestions.map((s) => {
+                          const hasVoted = s.votes.includes(self.id);
+                          return (
+                            <div
+                              key={s.id}
+                              id={`suggestion-item-${s.word.toLowerCase()}`}
+                              className="p-2.5 bg-carbon-900 border border-carbon-800 rounded flex items-center justify-between gap-3 text-xs"
+                            >
+                              <div className="flex items-center gap-3">
+                                <span className="font-bold text-white text-sm tracking-wider uppercase">
+                                  {s.word}
+                                </span>
+                                <span className="text-[10px] text-gray-500">
+                                  suggested by {s.suggestedBy}
+                                </span>
+                              </div>
+
+                              <div className="flex items-center gap-2">
+                                <button
+                                  id={`upvote-btn-${s.id}`}
+                                  onClick={() => handleVoteSuggestion(s.id)}
+                                  className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-bold uppercase transition-colors ${
+                                    hasVoted
+                                      ? "bg-classified-amber text-black"
+                                      : "bg-carbon-800 text-gray-300 hover:text-white border border-carbon-700"
+                                  }`}
+                                >
+                                  ▲ <span id={`suggestion-votes-${s.id}`}>{s.votes.length}</span>
+                                </button>
+
+                                {self.role === "SPYMASTER" && (
+                                  <button
+                                    id={`adopt-word-btn-${s.id}`}
+                                    onClick={() => handleAddSpymasterGuess(s.word)}
+                                    className="bg-carbon-800 hover:bg-carbon-700 text-classified-amber border border-classified-amber/30 px-2 py-1 rounded text-[11px] uppercase font-bold"
+                                  >
+                                    + ADOPT
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
 
           {/* INTELLIGENCE COMMUNICATIONS & FIELD SUITE */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
