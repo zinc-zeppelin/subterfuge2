@@ -128,6 +128,7 @@ export interface ClientGameState {
   };
   self: {
     id: string;
+    sessionToken: string;
     displayName: string;
     apparentTeam?: TeamColor;
     actualTeam?: TeamColor;

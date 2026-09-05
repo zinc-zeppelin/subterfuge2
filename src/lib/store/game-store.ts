@@ -152,14 +152,27 @@ class GameStore {
 
     // Check if player is reconnecting with same session token
     let sessionToken = params.sessionToken;
-    const existing = room.players.find((p) => p.sessionToken === sessionToken);
-    if (existing) {
-      if (existing.displayName.toLowerCase() === params.playerName.trim().toLowerCase()) {
-        return { room, player: existing };
+    const existingByToken = room.players.find((p) => p.sessionToken === sessionToken);
+    if (existingByToken) {
+      if (existingByToken.displayName.toLowerCase() === params.playerName.trim().toLowerCase()) {
+        return { room, player: existingByToken };
       }
-      // If someone joins with a different name but happens to share a session token (e.g. shared browser/cookie),
+      // If someone joins with a different name but happens to share a session token,
       // allocate a fresh session token so both players can coexist!
       sessionToken = randomUUID();
+    }
+
+    // Check if call-sign is already registered by another operative in this operation
+    const existingByName = room.players.find(
+      (p) => p.displayName.toLowerCase() === params.playerName.trim().toLowerCase()
+    );
+    if (existingByName) {
+      if (existingByName.sessionToken === params.sessionToken) {
+        return { room, player: existingByName };
+      }
+      throw new Error(
+        `OPERATIVE_EXISTS: Call-sign '${params.playerName.trim()}' is already registered in this operation. Please resume using your Personal Recovery Link or choose a distinct call-sign.`
+      );
     }
 
     const playerId = randomUUID();
@@ -402,6 +415,7 @@ class GameStore {
       },
       self: {
         id: self.id,
+        sessionToken: self.sessionToken,
         displayName: self.displayName,
         apparentTeam: self.apparentTeam,
         actualTeam: self.actualTeam,

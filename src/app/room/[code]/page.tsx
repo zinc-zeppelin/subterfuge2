@@ -79,18 +79,44 @@ export default function RoomPage() {
 
   // In-Page Direct Join & Session Isolation State
   const [isUnauthorized, setIsUnauthorized] = useState(false);
+  const [unauthRoomPhase, setUnauthRoomPhase] = useState<string | null>(null);
   const [joinCallsign, setJoinCallsign] = useState("");
   const [isJoining, setIsJoining] = useState(false);
   const [joinError, setJoinError] = useState<string | null>(null);
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
+  const [copiedPersonalLink, setCopiedPersonalLink] = useState(false);
+
+  // Mid-Game Recovery Portal State
+  const [recoveryTokenInput, setRecoveryTokenInput] = useState("");
+  const [isRecovering, setIsRecovering] = useState(false);
+  const [recoveryError, setRecoveryError] = useState<string | null>(null);
+  const [showTokenFormInLobby, setShowTokenFormInLobby] = useState(false);
+  const [hasSavedSession, setHasSavedSession] = useState(false);
 
   const decryptTimerRef = useRef<NodeJS.Timeout | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   const getSessionToken = useCallback(() => {
     if (typeof window === "undefined" || !code) return null;
-    return sessionStorage.getItem(`subterfuge_session_${code}`);
+
+    // 1. Check if URL has token or op query parameter (Personal Recovery Link)
+    const urlParams = new URLSearchParams(window.location.search);
+    const tokenFromUrl = urlParams.get("token") || urlParams.get("op");
+    if (tokenFromUrl) {
+      sessionStorage.setItem(`subterfuge_session_${code}`, tokenFromUrl);
+      localStorage.setItem(`subterfuge_session_${code}`, tokenFromUrl);
+      // Immediately sanitize address bar to prevent screen share / shoulder surfing leaks
+      const cleanUrl = window.location.pathname;
+      window.history.replaceState({}, document.title, cleanUrl);
+      return tokenFromUrl;
+    }
+
+    // 2. Check tab-scoped sessionStorage
+    const sessionTok = sessionStorage.getItem(`subterfuge_session_${code}`);
+    if (sessionTok) return sessionTok;
+
+    return null;
   }, [code]);
 
   const authFetch = useCallback(
@@ -152,8 +178,63 @@ export default function RoomPage() {
 
   const fetchState = useCallback(async () => {
     if (!code) return;
-    const token = getSessionToken();
+    let token = getSessionToken();
+
     if (!token) {
+      try {
+        const res = await fetch(`/api/rooms/${code}/state`);
+        if (res.ok) {
+          const data = await res.json();
+          // If match is active (INFILTRATION/VERDICT/DEBRIEF), auto-resume station immediately
+          if (data.room?.phase !== "LOBBY") {
+            setGameState(data);
+            setIsUnauthorized(false);
+            if (data.self?.sessionToken && typeof window !== "undefined") {
+              sessionStorage.setItem(`subterfuge_session_${code}`, data.self.sessionToken);
+              localStorage.setItem(`subterfuge_session_${code}`, data.self.sessionToken);
+            }
+            return;
+          } else {
+            // In LOBBY, do not auto-assume session across separate tabs sharing cookies
+            setHasSavedSession(true);
+            setUnauthRoomPhase("LOBBY");
+            setIsUnauthorized(true);
+            return;
+          }
+        } else if (res.status === 401) {
+          const errData = await res.json();
+          const phase = errData.phase || "LOBBY";
+          setUnauthRoomPhase(phase);
+
+          // During INFILTRATION, VERDICT, or DEBRIEF:
+          // If this device has a saved token in localStorage, auto-resume station immediately!
+          if (phase !== "LOBBY" && typeof window !== "undefined") {
+            const savedLocalToken = localStorage.getItem(`subterfuge_session_${code}`);
+            if (savedLocalToken) {
+              sessionStorage.setItem(`subterfuge_session_${code}`, savedLocalToken);
+              token = savedLocalToken;
+              const authRes = await fetch(`/api/rooms/${code}/state`, {
+                headers: { "x-session-token": token },
+              });
+              if (authRes.ok) {
+                const data = await authRes.json();
+                setGameState(data);
+                setIsUnauthorized(false);
+                return;
+              }
+            }
+          }
+
+          if (typeof window !== "undefined" && localStorage.getItem(`subterfuge_session_${code}`)) {
+            setHasSavedSession(true);
+          }
+        } else if (res.status === 404) {
+          setError("OPERATION NOT FOUND: Operation does not exist or has been terminated.");
+          return;
+        }
+      } catch {
+        // ignore
+      }
       setIsUnauthorized(true);
       return;
     }
@@ -161,6 +242,11 @@ export default function RoomPage() {
       const res = await authFetch(`/api/rooms/${code}/state`);
       if (!res.ok) {
         if (res.status === 401) {
+          const errData = await res.json();
+          if (errData.phase) setUnauthRoomPhase(errData.phase);
+          if (typeof window !== "undefined" && localStorage.getItem(`subterfuge_session_${code}`)) {
+            setHasSavedSession(true);
+          }
           setIsUnauthorized(true);
           return;
         }
@@ -174,6 +260,11 @@ export default function RoomPage() {
       const data = await res.json();
       setGameState(data);
       setIsUnauthorized(false);
+      // Keep session token updated across storages
+      if (data.self?.sessionToken && typeof window !== "undefined") {
+        sessionStorage.setItem(`subterfuge_session_${code}`, data.self.sessionToken);
+        localStorage.setItem(`subterfuge_session_${code}`, data.self.sessionToken);
+      }
     } catch (err: any) {
       setGameState((prev) => {
         if (!prev) setError(err.message);
@@ -212,6 +303,7 @@ export default function RoomPage() {
       }
       if (typeof window !== "undefined" && data.sessionToken) {
         sessionStorage.setItem(`subterfuge_session_${code}`, data.sessionToken);
+        localStorage.setItem(`subterfuge_session_${code}`, data.sessionToken);
       }
       setIsUnauthorized(false);
       await fetchState();
@@ -220,6 +312,56 @@ export default function RoomPage() {
     } finally {
       setIsJoining(false);
     }
+  };
+
+  const handleTokenRecovery = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!recoveryTokenInput.trim() || !code || isRecovering) return;
+    setIsRecovering(true);
+    setRecoveryError(null);
+    try {
+      let token = recoveryTokenInput.trim();
+      if (token.includes("token=")) {
+        const match = token.match(/[?&]token=([^&]+)/);
+        if (match) token = decodeURIComponent(match[1]);
+      } else if (token.includes("op=")) {
+        const match = token.match(/[?&]op=([^&]+)/);
+        if (match) token = decodeURIComponent(match[1]);
+      }
+
+      if (typeof window !== "undefined") {
+        sessionStorage.setItem(`subterfuge_session_${code}`, token);
+        localStorage.setItem(`subterfuge_session_${code}`, token);
+      }
+
+      const res = await fetch(`/api/rooms/${code}/state`, {
+        headers: { "x-session-token": token },
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        if (typeof window !== "undefined") {
+          sessionStorage.removeItem(`subterfuge_session_${code}`);
+          localStorage.removeItem(`subterfuge_session_${code}`);
+        }
+        throw new Error(data.error || "OPERATIVE NOT RECOGNIZED: Invalid recovery credentials.");
+      }
+      const data = await res.json();
+      setGameState(data);
+      setIsUnauthorized(false);
+    } catch (err: any) {
+      setRecoveryError(err.message);
+    } finally {
+      setIsRecovering(false);
+    }
+  };
+
+  const handleDisconnectStation = () => {
+    if (typeof window !== "undefined" && code) {
+      sessionStorage.removeItem(`subterfuge_session_${code}`);
+      localStorage.removeItem(`subterfuge_session_${code}`);
+    }
+    setGameState(null);
+    setIsUnauthorized(true);
   };
 
   useEffect(() => {
@@ -569,6 +711,96 @@ export default function RoomPage() {
 
   if (!gameState) {
     if (isUnauthorized) {
+      const isMidGame = unauthRoomPhase === "INFILTRATION" || unauthRoomPhase === "VERDICT";
+
+      if (isMidGame) {
+        return (
+          <div className="flex-1 flex items-center justify-center p-6 max-w-md mx-auto w-full font-mono">
+            <div
+              id="reconnect-operation-card"
+              className="bg-carbon-900 border-2 border-carbon-700 rounded-lg p-6 sm:p-8 w-full shadow-2xl space-y-6"
+            >
+              <div className="space-y-2 border-b border-carbon-800 pb-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-classified-amber">
+                    <Terminal className="w-5 h-5" />
+                    <span className="text-xs font-bold uppercase tracking-wider">OPERATION: {code}</span>
+                  </div>
+                  <span className="classified-stamp text-[9px] text-classified-crimson border-classified-crimson py-0.2 px-1 animate-pulse">
+                    IN PROGRESS // {unauthRoomPhase}
+                  </span>
+                </div>
+                <h2 className="text-lg font-extrabold text-white uppercase tracking-wider">
+                  Operative Recovery Portal
+                </h2>
+                <p className="text-xs text-gray-400 leading-relaxed">
+                  This operation has commenced active deployment. Direct onboarding is closed. If you were disconnected from this match, paste your Personal Recovery Link or secret token below to resume your station.
+                </p>
+              </div>
+
+              {recoveryError && (
+                <div
+                  id="recovery-error-banner"
+                  className="p-3 bg-red-950/60 border border-red-800 text-red-300 rounded text-xs flex items-center gap-2"
+                >
+                  <ShieldAlert className="w-4 h-4 shrink-0 text-red-400" />
+                  <span>{recoveryError}</span>
+                </div>
+              )}
+
+              <form id="recovery-token-form" onSubmit={handleTokenRecovery} className="space-y-4">
+                <div>
+                  <label
+                    htmlFor="recovery-token-input"
+                    className="block text-xs font-bold text-gray-300 uppercase tracking-wider mb-2"
+                  >
+                    Personal Recovery Link or Secret Token
+                  </label>
+                  <input
+                    id="recovery-token-input"
+                    type="text"
+                    placeholder="Paste URL or token: e.g. /room/XYZ?token=... or uuid"
+                    value={recoveryTokenInput}
+                    onChange={(e) => setRecoveryTokenInput(e.target.value)}
+                    disabled={isRecovering}
+                    className="w-full bg-carbon-950 border border-carbon-700 rounded px-4 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-classified-amber font-mono"
+                    required
+                  />
+                </div>
+
+                <button
+                  id="resume-station-btn"
+                  type="submit"
+                  disabled={isRecovering || !recoveryTokenInput.trim()}
+                  className="w-full py-3 px-4 bg-classified-terminal hover:bg-green-400 disabled:opacity-50 text-black font-mono font-bold text-xs uppercase tracking-widest rounded transition-colors shadow-lg flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  {isRecovering ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      RE-AUTHENTICATING STATION...
+                    </>
+                  ) : (
+                    <>
+                      <KeyRound className="w-4 h-4" />
+                      RESUME OPERATIONAL STATION
+                    </>
+                  )}
+                </button>
+              </form>
+
+              <div className="pt-2 border-t border-carbon-800 text-center">
+                <button
+                  onClick={() => router.push("/")}
+                  className="text-xs text-gray-500 hover:text-gray-300 transition-colors uppercase tracking-wider"
+                >
+                  ← Return to Central Command
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
       return (
         <div className="flex-1 flex items-center justify-center p-6 max-w-md mx-auto w-full font-mono">
           <div className="bg-carbon-900 border-2 border-carbon-700 rounded-lg p-6 sm:p-8 w-full shadow-2xl space-y-6">
@@ -583,63 +815,192 @@ export default function RoomPage() {
                 </span>
               </div>
               <h2 className="text-lg font-extrabold text-white uppercase tracking-wider">
-                Operative Onboarding
+                {showTokenFormInLobby ? "Resume Operative Station" : "Operative Onboarding"}
               </h2>
               <p className="text-xs text-gray-400 leading-relaxed">
-                You have reached an encrypted operation gateway. Enter your operative call-sign to establish an encrypted uplink and infiltrate this operation.
+                {showTokenFormInLobby
+                  ? "Paste your Personal Recovery Link or secret token to restore your existing terminal."
+                  : "You have reached an encrypted operation gateway. Enter your operative call-sign to establish an encrypted uplink and infiltrate this operation."}
               </p>
             </div>
 
-            {joinError && (
+            {joinError && !showTokenFormInLobby && (
               <div
                 id="join-error-banner"
+                className="p-3 bg-red-950/60 border border-red-800 text-red-300 rounded text-xs flex flex-col gap-2"
+              >
+                <div className="flex items-center gap-2">
+                  <ShieldAlert className="w-4 h-4 shrink-0 text-red-400" />
+                  <span>{joinError}</span>
+                </div>
+                {joinError.includes("OPERATIVE_EXISTS") && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowTokenFormInLobby(true);
+                      setJoinError(null);
+                    }}
+                    className="text-classified-terminal text-left underline cursor-pointer text-[11px] font-bold"
+                  >
+                    Are you this operative? Click here to enter your Recovery Link or Token.
+                  </button>
+                )}
+              </div>
+            )}
+
+            {recoveryError && showTokenFormInLobby && (
+              <div
+                id="recovery-error-banner"
                 className="p-3 bg-red-950/60 border border-red-800 text-red-300 rounded text-xs flex items-center gap-2"
               >
                 <ShieldAlert className="w-4 h-4 shrink-0 text-red-400" />
-                <span>{joinError}</span>
+                <span>{recoveryError}</span>
+              </div>
+            )}
+
+            {showTokenFormInLobby ? (
+              <form id="recovery-token-form" onSubmit={handleTokenRecovery} className="space-y-4">
+                <div>
+                  <label
+                    htmlFor="recovery-token-input"
+                    className="block text-xs font-bold text-gray-300 uppercase tracking-wider mb-2"
+                  >
+                    Personal Recovery Link or Secret Token
+                  </label>
+                  <input
+                    id="recovery-token-input"
+                    type="text"
+                    placeholder="Paste URL or token: e.g. /room/XYZ?token=... or uuid"
+                    value={recoveryTokenInput}
+                    onChange={(e) => setRecoveryTokenInput(e.target.value)}
+                    disabled={isRecovering}
+                    className="w-full bg-carbon-950 border border-carbon-700 rounded px-4 py-2.5 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-classified-amber font-mono"
+                    required
+                  />
+                </div>
+
+                <button
+                  id="resume-station-btn"
+                  type="submit"
+                  disabled={isRecovering || !recoveryTokenInput.trim()}
+                  className="w-full py-3 px-4 bg-classified-terminal hover:bg-green-400 disabled:opacity-50 text-black font-mono font-bold text-xs uppercase tracking-widest rounded transition-colors shadow-lg flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  {isRecovering ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      RE-AUTHENTICATING STATION...
+                    </>
+                  ) : (
+                    <>
+                      <KeyRound className="w-4 h-4" />
+                      RESUME OPERATIONAL STATION
+                    </>
+                  )}
+                </button>
+
+                <div className="text-center pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowTokenFormInLobby(false);
+                      setRecoveryError(null);
+                    }}
+                    className="text-xs text-gray-400 hover:text-white underline cursor-pointer"
+                  >
+                    ← Infiltrate with new operative call-sign
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <>
+                {hasSavedSession && (
+                  <div
+                    id="saved-session-alert"
+                className="p-3 bg-carbon-950 border border-classified-terminal/60 rounded flex flex-col gap-2 font-mono"
+              >
+                <div className="flex items-center gap-2 text-classified-terminal text-xs">
+                  <KeyRound className="w-3.5 h-3.5 shrink-0" />
+                  <span className="font-bold">SAVED OPERATIVE CREDENTIALS DETECTED</span>
+                </div>
+                <p className="text-[11px] text-gray-400">
+                  This device was previously deployed to this operation. You can resume your station or declare a new call-sign below.
+                </p>
+                <button
+                  id="resume-saved-session-btn"
+                  type="button"
+                  onClick={() => {
+                    const savedToken = localStorage.getItem(`subterfuge_session_${code}`);
+                    if (savedToken) {
+                      sessionStorage.setItem(`subterfuge_session_${code}`, savedToken);
+                      setIsUnauthorized(false);
+                      fetchState();
+                    }
+                  }}
+                  className="w-full py-2 px-3 bg-classified-terminal hover:bg-green-400 text-black font-mono font-bold text-xs uppercase tracking-wider rounded transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <KeyRound className="w-3.5 h-3.5" />
+                  RESUME PREVIOUS STATION
+                </button>
               </div>
             )}
 
             <form id="join-operation-form" onSubmit={handleDirectJoin} className="space-y-4">
-              <div>
-                <label
-                  htmlFor="join-callsign-input"
-                  className="block text-xs font-bold text-gray-300 uppercase tracking-wider mb-2"
-                >
-                  Operative Call-Sign
-                </label>
-                <input
-                  id="join-callsign-input"
-                  type="text"
-                  placeholder="e.g. Ghost-Asset"
-                  value={joinCallsign}
-                  onChange={(e) => setJoinCallsign(e.target.value)}
-                  disabled={isJoining}
-                  maxLength={20}
-                  className="w-full bg-carbon-950 border border-carbon-700 rounded px-4 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-classified-amber font-mono"
-                  required
-                />
-              </div>
+                <div>
+                  <label
+                    htmlFor="join-callsign-input"
+                    className="block text-xs font-bold text-gray-300 uppercase tracking-wider mb-2"
+                  >
+                    Operative Call-Sign
+                  </label>
+                  <input
+                    id="join-callsign-input"
+                    type="text"
+                    placeholder="e.g. Ghost-Asset"
+                    value={joinCallsign}
+                    onChange={(e) => setJoinCallsign(e.target.value)}
+                    disabled={isJoining}
+                    maxLength={20}
+                    className="w-full bg-carbon-950 border border-carbon-700 rounded px-4 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-classified-amber font-mono"
+                    required
+                  />
+                </div>
 
-              <button
-                id="join-room-submit-btn"
-                type="submit"
-                disabled={isJoining || !joinCallsign.trim()}
-                className="w-full py-3 px-4 bg-classified-amber hover:bg-amber-400 disabled:opacity-50 text-black font-mono font-bold text-xs uppercase tracking-widest rounded transition-colors shadow-lg flex items-center justify-center gap-2 cursor-pointer"
-              >
-                {isJoining ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    AUTHORIZING CLEARANCE...
-                  </>
-                ) : (
-                  <>
-                    <ShieldCheck className="w-4 h-4" />
-                    COMMENCE INFILTRATION
-                  </>
-                )}
-              </button>
-            </form>
+                <button
+                  id="join-room-submit-btn"
+                  type="submit"
+                  disabled={isJoining || !joinCallsign.trim()}
+                  className="w-full py-3 px-4 bg-classified-amber hover:bg-amber-400 disabled:opacity-50 text-black font-mono font-bold text-xs uppercase tracking-widest rounded transition-colors shadow-lg flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  {isJoining ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      AUTHORIZING CLEARANCE...
+                    </>
+                  ) : (
+                    <>
+                      <ShieldCheck className="w-4 h-4" />
+                      COMMENCE INFILTRATION
+                    </>
+                  )}
+                </button>
+
+                <div className="text-center pt-2">
+                  <button
+                    type="button"
+                    id="toggle-recovery-form-btn"
+                    onClick={() => {
+                      setShowTokenFormInLobby(true);
+                      setJoinError(null);
+                    }}
+                    className="text-xs text-gray-400 hover:text-classified-terminal underline cursor-pointer flex items-center justify-center gap-1.5 mx-auto"
+                  >
+                    <KeyRound className="w-3.5 h-3.5 text-classified-terminal" />
+                    <span>Already deployed? Resume with Secret Token / Link</span>
+                  </button>
+                </div>
+              </form>
+              </>
+            )}
 
             <div className="pt-2 border-t border-carbon-800 text-center">
               <button
@@ -786,6 +1147,37 @@ export default function RoomPage() {
             <BookOpen className="w-3.5 h-3.5" />
             FIELD MANUAL
           </button>
+
+          {room.phase !== "LOBBY" && (
+            <button
+              id="copy-personal-link-btn"
+              onClick={async () => {
+                if (typeof window === "undefined") return;
+                const token = self.sessionToken || getSessionToken();
+                const url = `${window.location.origin}/room/${room.code}?token=${token}`;
+                try {
+                  await navigator.clipboard.writeText(url);
+                  setCopiedPersonalLink(true);
+                  setTimeout(() => setCopiedPersonalLink(false), 3000);
+                } catch {
+                  // ignore
+                }
+              }}
+              className="px-3 py-1.5 bg-carbon-850 hover:bg-carbon-800 border border-classified-terminal/60 text-classified-terminal rounded text-xs font-mono font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
+            >
+              {copiedPersonalLink ? (
+                <>
+                  <Check className="w-3.5 h-3.5 text-classified-terminal" />
+                  <span>LINK COPIED!</span>
+                </>
+              ) : (
+                <>
+                  <KeyRound className="w-3.5 h-3.5 text-classified-terminal" />
+                  <span>RECOVERY LINK</span>
+                </>
+              )}
+            </button>
+          )}
         </div>
       </div>
 
@@ -919,6 +1311,35 @@ export default function RoomPage() {
                   </>
                 )}
               </button>
+
+              <button
+                id="copy-personal-link-btn"
+                onClick={async () => {
+                  if (typeof window === "undefined") return;
+                  const token = self.sessionToken || getSessionToken();
+                  const url = `${window.location.origin}/room/${room.code}?token=${token}`;
+                  try {
+                    await navigator.clipboard.writeText(url);
+                    setCopiedPersonalLink(true);
+                    setTimeout(() => setCopiedPersonalLink(false), 3000);
+                  } catch {
+                    // ignore
+                  }
+                }}
+                className="px-3.5 py-2 bg-carbon-800 hover:bg-carbon-750 border border-classified-terminal/60 text-classified-terminal rounded text-xs font-mono font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
+              >
+                {copiedPersonalLink ? (
+                  <>
+                    <Check className="w-3.5 h-3.5 text-classified-terminal" />
+                    <span className="text-classified-terminal">RECOVERY LINK COPIED!</span>
+                  </>
+                ) : (
+                  <>
+                    <KeyRound className="w-3.5 h-3.5 text-classified-terminal" />
+                    <span>MY RECOVERY LINK</span>
+                  </>
+                )}
+              </button>
             </div>
           </div>
 
@@ -1000,6 +1421,16 @@ export default function RoomPage() {
               >
                 {self.isReady ? "CANCEL READY STATUS" : "DECLARE OPERATIONAL READY"}
               </button>
+
+              <div className="mt-3 pt-3 border-t border-carbon-800 text-center">
+                <button
+                  id="disconnect-station-btn"
+                  onClick={handleDisconnectStation}
+                  className="text-[11px] text-gray-500 hover:text-red-400 uppercase tracking-wider font-mono transition-colors cursor-pointer"
+                >
+                  Disconnect Station / Switch Operative
+                </button>
+              </div>
             </div>
 
             <div className="bg-carbon-900 border border-carbon-800 rounded-lg p-6 space-y-3 font-mono text-xs">
@@ -1440,7 +1871,7 @@ export default function RoomPage() {
         /* PHASE 2: INFILTRATION VIEW (CLASSIFIED DOSSIER + INTELLIGENCE COMMS) */
         <div className="space-y-6">
           {/* Top Secret Operative Dossier Card */}
-          <div className="bg-carbon-900 border border-carbon-700 rounded-lg p-6 shadow-2xl relative overflow-hidden">
+          <div id="top-secret-dossier" className="bg-carbon-900 border border-carbon-700 rounded-lg p-6 shadow-2xl relative overflow-hidden">
             <div className="absolute top-0 right-0 transform translate-x-4 -translate-y-2">
               <span className="classified-stamp text-xs text-classified-crimson border-classified-crimson opacity-80">
                 TOP SECRET // EYES ONLY

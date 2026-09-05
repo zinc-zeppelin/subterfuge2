@@ -37,6 +37,7 @@ function HomeContent() {
       const data = await res.json();
       if (typeof window !== "undefined" && data.sessionToken) {
         sessionStorage.setItem(`subterfuge_session_${data.roomCode}`, data.sessionToken);
+        localStorage.setItem(`subterfuge_session_${data.roomCode}`, data.sessionToken);
       }
       router.push(`/room/${data.roomCode}`);
     } catch (err: any) {
@@ -70,6 +71,7 @@ function HomeContent() {
 
       if (typeof window !== "undefined" && data.sessionToken) {
         sessionStorage.setItem(`subterfuge_session_${code}`, data.sessionToken);
+        localStorage.setItem(`subterfuge_session_${code}`, data.sessionToken);
       }
       router.push(`/room/${code}`);
     } catch (err: any) {

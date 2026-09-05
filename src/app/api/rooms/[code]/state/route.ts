@@ -9,9 +9,22 @@ export async function GET(
     const { code } = params;
     const sessionToken =
       req.headers.get("x-session-token") ||
+      req.nextUrl.searchParams.get("token") ||
       req.cookies.get("subterfuge_session")?.value;
 
     if (!sessionToken) {
+      const room = gameStore.getRoom(code);
+      if (room) {
+        return NextResponse.json(
+          {
+            error: "NO_SESSION: Missing session credentials",
+            phase: room.phase,
+            playerCount: room.players.length,
+            roomCode: room.code,
+          },
+          { status: 401 }
+        );
+      }
       return NextResponse.json(
         { error: "NO_SESSION: Missing session credentials" },
         { status: 401 }
