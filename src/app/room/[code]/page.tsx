@@ -22,6 +22,15 @@ import {
   Award,
   RefreshCw,
   Trophy,
+  BookOpen,
+  ChevronDown,
+  ChevronUp,
+  X,
+  UserX,
+  Copy,
+  Check,
+  Link as LinkIcon,
+  KeyRound,
 } from "lucide-react";
 
 export default function RoomPage() {
@@ -63,8 +72,41 @@ export default function RoomPage() {
   const [verdictError, setVerdictError] = useState<string | null>(null);
   const [isRematching, setIsRematching] = useState(false);
 
+  // Operational Field Manual State
+  const [isManualOpen, setIsManualOpen] = useState(false);
+  const [isSpymasterExpanded, setIsSpymasterExpanded] = useState(false);
+  const [isMoleExpanded, setIsMoleExpanded] = useState(false);
+
+  // In-Page Direct Join & Session Isolation State
+  const [isUnauthorized, setIsUnauthorized] = useState(false);
+  const [joinCallsign, setJoinCallsign] = useState("");
+  const [isJoining, setIsJoining] = useState(false);
+  const [joinError, setJoinError] = useState<string | null>(null);
+  const [copiedLink, setCopiedLink] = useState(false);
+  const [copiedCode, setCopiedCode] = useState(false);
+
   const decryptTimerRef = useRef<NodeJS.Timeout | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+
+  const getSessionToken = useCallback(() => {
+    if (typeof window === "undefined" || !code) return null;
+    return sessionStorage.getItem(`subterfuge_session_${code}`);
+  }, [code]);
+
+  const authFetch = useCallback(
+    (url: string, init?: RequestInit) => {
+      const token = getSessionToken();
+      const headers = new Headers(init?.headers || {});
+      if (token) {
+        headers.set("x-session-token", token);
+      }
+      return fetch(url, {
+        ...init,
+        headers,
+      });
+    },
+    [getSessionToken]
+  );
 
   useEffect(() => {
     const updateTimers = () => {
@@ -110,11 +152,20 @@ export default function RoomPage() {
 
   const fetchState = useCallback(async () => {
     if (!code) return;
+    const token = getSessionToken();
+    if (!token) {
+      setIsUnauthorized(true);
+      return;
+    }
     try {
-      const res = await fetch(`/api/rooms/${code}/state`);
+      const res = await authFetch(`/api/rooms/${code}/state`);
       if (!res.ok) {
         if (res.status === 401) {
-          router.push(`/?joinCode=${code}`);
+          setIsUnauthorized(true);
+          return;
+        }
+        if (res.status === 404) {
+          setError("OPERATION NOT FOUND: Operation does not exist or has been terminated.");
           return;
         }
         const errData = await res.json();
@@ -122,18 +173,19 @@ export default function RoomPage() {
       }
       const data = await res.json();
       setGameState(data);
+      setIsUnauthorized(false);
     } catch (err: any) {
       setGameState((prev) => {
         if (!prev) setError(err.message);
         return prev;
       });
     }
-  }, [code, router]);
+  }, [code, authFetch, getSessionToken]);
 
   const fetchMessages = useCallback(async () => {
     if (!code) return;
     try {
-      const res = await fetch(`/api/rooms/${code}/messages`);
+      const res = await authFetch(`/api/rooms/${code}/messages`);
       if (res.ok) {
         const data = await res.json();
         setMessages(data.messages || []);
@@ -141,17 +193,48 @@ export default function RoomPage() {
     } catch {
       // Ignore polling errors
     }
-  }, [code]);
+  }, [code, authFetch]);
+
+  const handleDirectJoin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!joinCallsign.trim() || !code || isJoining) return;
+    setIsJoining(true);
+    setJoinError(null);
+    try {
+      const res = await fetch(`/api/rooms/${code}/join`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ playerName: joinCallsign.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to infiltrate operation");
+      }
+      if (typeof window !== "undefined" && data.sessionToken) {
+        sessionStorage.setItem(`subterfuge_session_${code}`, data.sessionToken);
+      }
+      setIsUnauthorized(false);
+      await fetchState();
+    } catch (err: any) {
+      setJoinError(err.message);
+    } finally {
+      setIsJoining(false);
+    }
+  };
 
   useEffect(() => {
     fetchState();
+  }, [fetchState]);
+
+  useEffect(() => {
+    if (!gameState) return;
     fetchMessages();
     const interval = setInterval(() => {
       fetchState();
       fetchMessages();
     }, 2000);
     return () => clearInterval(interval);
-  }, [fetchState, fetchMessages]);
+  }, [gameState, fetchState, fetchMessages]);
 
   useEffect(() => {
     return () => {
@@ -169,11 +252,45 @@ export default function RoomPage() {
     }
   }, [gameState, selectedPeerId]);
 
+  const handleOpenManual = () => {
+    if (gameState?.self.role === "SPYMASTER") {
+      setIsSpymasterExpanded(true);
+      setIsMoleExpanded(false);
+    } else if (gameState?.self.role === "MOLE") {
+      setIsMoleExpanded(true);
+      setIsSpymasterExpanded(false);
+    } else {
+      setIsSpymasterExpanded(false);
+      setIsMoleExpanded(false);
+    }
+    setIsManualOpen(true);
+  };
+
+  // Auto-expand relevant role section in Field Manual when role is assigned
+  useEffect(() => {
+    if (gameState?.self.role === "SPYMASTER") {
+      setIsSpymasterExpanded(true);
+      setIsMoleExpanded(false);
+    } else if (gameState?.self.role === "MOLE") {
+      setIsMoleExpanded(true);
+      setIsSpymasterExpanded(false);
+    }
+  }, [gameState?.self.role]);
+
+  // Keyboard shortcut: Escape dismisses Field Manual
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setIsManualOpen(false);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
   const handleToggleReady = async () => {
     if (!gameState || !code || isTogglingReady) return;
     setIsTogglingReady(true);
     try {
-      const res = await fetch(`/api/rooms/${code}/ready`, {
+      const res = await authFetch(`/api/rooms/${code}/ready`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ playerId: gameState.self.id }),
@@ -190,7 +307,7 @@ export default function RoomPage() {
     if (!gameState || !code || isStartingOperation) return;
     setIsStartingOperation(true);
     try {
-      const res = await fetch(`/api/rooms/${code}/start`, {
+      const res = await authFetch(`/api/rooms/${code}/start`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
       });
@@ -225,7 +342,7 @@ export default function RoomPage() {
 
     setIsSendingMessage(true);
     try {
-      const res = await fetch(`/api/rooms/${code}/messages`, {
+      const res = await authFetch(`/api/rooms/${code}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -250,7 +367,7 @@ export default function RoomPage() {
     if (!selectedPeerId || !code || isBurning) return;
     setIsBurning(true);
     try {
-      const res = await fetch(`/api/rooms/${code}/messages/burn`, {
+      const res = await authFetch(`/api/rooms/${code}/messages/burn`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ peerId: selectedPeerId }),
@@ -270,7 +387,7 @@ export default function RoomPage() {
     if (!selectedPeerId || !code || isChallenging) return;
     setIsChallenging(true);
     try {
-      const res = await fetch(`/api/rooms/${code}/mole/challenge`, {
+      const res = await authFetch(`/api/rooms/${code}/mole/challenge`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ targetPlayerId: selectedPeerId }),
@@ -289,7 +406,7 @@ export default function RoomPage() {
     if (!code || challengeActionLoading) return;
     setChallengeActionLoading(true);
     try {
-      const res = await fetch(`/api/rooms/${code}/mole/respond`, {
+      const res = await authFetch(`/api/rooms/${code}/mole/respond`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ challengeId, action }),
@@ -317,7 +434,7 @@ export default function RoomPage() {
     if (!code || !proposalInput.trim() || isProposing) return;
     setIsProposing(true);
     try {
-      const res = await fetch(`/api/rooms/${code}/verdict/suggest`, {
+      const res = await authFetch(`/api/rooms/${code}/verdict/suggest`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ word: proposalInput }),
@@ -334,7 +451,7 @@ export default function RoomPage() {
   const handleVoteSuggestion = async (suggestionId: string) => {
     if (!code) return;
     try {
-      const res = await fetch(`/api/rooms/${code}/verdict/vote`, {
+      const res = await authFetch(`/api/rooms/${code}/verdict/vote`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ suggestionId }),
@@ -371,7 +488,7 @@ export default function RoomPage() {
     setIsSubmittingVerdict(true);
     setVerdictError(null);
     try {
-      const res = await fetch(`/api/rooms/${code}/verdict/submit`, {
+      const res = await authFetch(`/api/rooms/${code}/verdict/submit`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -396,7 +513,7 @@ export default function RoomPage() {
     setIsRematching(true);
     setError(null);
     try {
-      const res = await fetch(`/api/rooms/${code}/rematch`, {
+      const res = await authFetch(`/api/rooms/${code}/rematch`, {
         method: "POST",
       });
       if (!res.ok) {
@@ -451,6 +568,92 @@ export default function RoomPage() {
   }
 
   if (!gameState) {
+    if (isUnauthorized) {
+      return (
+        <div className="flex-1 flex items-center justify-center p-6 max-w-md mx-auto w-full font-mono">
+          <div className="bg-carbon-900 border-2 border-carbon-700 rounded-lg p-6 sm:p-8 w-full shadow-2xl space-y-6">
+            <div className="space-y-2 border-b border-carbon-800 pb-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-classified-amber">
+                  <Terminal className="w-5 h-5" />
+                  <span className="text-xs font-bold uppercase tracking-wider">OPERATION: {code}</span>
+                </div>
+                <span className="classified-stamp text-[9px] text-classified-amber border-classified-amber py-0.2 px-1">
+                  CLEARANCE REQUIRED
+                </span>
+              </div>
+              <h2 className="text-lg font-extrabold text-white uppercase tracking-wider">
+                Operative Onboarding
+              </h2>
+              <p className="text-xs text-gray-400 leading-relaxed">
+                You have reached an encrypted operation gateway. Enter your operative call-sign to establish an encrypted uplink and infiltrate this operation.
+              </p>
+            </div>
+
+            {joinError && (
+              <div
+                id="join-error-banner"
+                className="p-3 bg-red-950/60 border border-red-800 text-red-300 rounded text-xs flex items-center gap-2"
+              >
+                <ShieldAlert className="w-4 h-4 shrink-0 text-red-400" />
+                <span>{joinError}</span>
+              </div>
+            )}
+
+            <form id="join-operation-form" onSubmit={handleDirectJoin} className="space-y-4">
+              <div>
+                <label
+                  htmlFor="join-callsign-input"
+                  className="block text-xs font-bold text-gray-300 uppercase tracking-wider mb-2"
+                >
+                  Operative Call-Sign
+                </label>
+                <input
+                  id="join-callsign-input"
+                  type="text"
+                  placeholder="e.g. Ghost-Asset"
+                  value={joinCallsign}
+                  onChange={(e) => setJoinCallsign(e.target.value)}
+                  disabled={isJoining}
+                  maxLength={20}
+                  className="w-full bg-carbon-950 border border-carbon-700 rounded px-4 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-classified-amber font-mono"
+                  required
+                />
+              </div>
+
+              <button
+                id="join-room-submit-btn"
+                type="submit"
+                disabled={isJoining || !joinCallsign.trim()}
+                className="w-full py-3 px-4 bg-classified-amber hover:bg-amber-400 disabled:opacity-50 text-black font-mono font-bold text-xs uppercase tracking-widest rounded transition-colors shadow-lg flex items-center justify-center gap-2 cursor-pointer"
+              >
+                {isJoining ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    AUTHORIZING CLEARANCE...
+                  </>
+                ) : (
+                  <>
+                    <ShieldCheck className="w-4 h-4" />
+                    COMMENCE INFILTRATION
+                  </>
+                )}
+              </button>
+            </form>
+
+            <div className="pt-2 border-t border-carbon-800 text-center">
+              <button
+                onClick={() => router.push("/")}
+                className="text-xs text-gray-500 hover:text-gray-300 transition-colors uppercase tracking-wider"
+              >
+                ← Return to Central Command
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="flex-1 flex items-center justify-center font-mono text-gray-500 text-sm">
         <Terminal className="w-5 h-5 animate-spin mr-3 text-classified-amber" />
@@ -460,8 +663,8 @@ export default function RoomPage() {
   }
 
   const { room, self, players, allVerdicts, codebook } = gameState;
-  const isEven = players.length % 2 === 0 && players.length >= 4;
-  const allReady = players.length >= 4 && players.every((p) => p.isReady);
+  const isEven = players.length % 2 === 0;
+  const allReady = players.length >= 4 && isEven && players.every((p) => p.isReady);
   const isInfiltration = room.phase === "INFILTRATION";
 
   const redApparentPlayers = players.filter((p) => p.apparentTeam === "RED");
@@ -574,6 +777,15 @@ export default function RoomPage() {
             <Clock className="w-4 h-4 text-gray-500" />
             <span>DURATION: <strong className="text-white">{room.durationHours}H</strong></span>
           </div>
+
+          <button
+            id="field-manual-btn"
+            onClick={handleOpenManual}
+            className="px-3 py-1.5 bg-carbon-850 hover:bg-carbon-800 border border-classified-amber/60 text-classified-amber rounded text-xs font-mono font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
+          >
+            <BookOpen className="w-3.5 h-3.5" />
+            FIELD MANUAL
+          </button>
         </div>
       </div>
 
@@ -628,7 +840,89 @@ export default function RoomPage() {
 
       {/* PHASE 1: LOBBY VIEW */}
       {room.phase === "LOBBY" ? (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="space-y-6">
+          {/* Operation Secure Invite Link Banner */}
+          <div
+            id="room-invite-banner"
+            className="bg-carbon-900 border border-classified-amber/50 rounded-lg p-4 sm:p-5 font-mono shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4"
+          >
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-classified-amber animate-ping shrink-0" />
+                <h3 className="text-xs sm:text-sm font-bold text-white uppercase tracking-wider">
+                  Secure Uplink Link // Dispatch Operatives
+                </h3>
+              </div>
+              <p className="text-[11px] text-gray-400">
+                Share this direct room link or the Operation Code so other players can join this match.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
+              <div className="flex items-center gap-2 bg-carbon-950 border border-carbon-700 px-3 py-2 rounded text-xs text-gray-300 font-mono select-all flex-1 md:flex-none">
+                <LinkIcon className="w-3.5 h-3.5 text-classified-amber shrink-0" />
+                <span id="room-invite-url" className="tracking-wider break-all">
+                  {typeof window !== "undefined" ? `${window.location.origin}/room/${room.code}` : `/room/${room.code}`}
+                </span>
+              </div>
+
+              <button
+                id="copy-invite-link-btn"
+                onClick={async () => {
+                  if (typeof window === "undefined") return;
+                  const url = `${window.location.origin}/room/${room.code}`;
+                  try {
+                    await navigator.clipboard.writeText(url);
+                    setCopiedLink(true);
+                    setTimeout(() => setCopiedLink(false), 3000);
+                  } catch {
+                    // ignore
+                  }
+                }}
+                className="px-3.5 py-2 bg-classified-amber/15 hover:bg-classified-amber/25 border border-classified-amber text-classified-amber rounded text-xs font-mono font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
+              >
+                {copiedLink ? (
+                  <>
+                    <Check className="w-3.5 h-3.5 text-classified-terminal" />
+                    <span className="text-classified-terminal">LINK COPIED!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>COPY LINK</span>
+                  </>
+                )}
+              </button>
+
+              <button
+                id="copy-room-code-btn"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(room.code);
+                    setCopiedCode(true);
+                    setTimeout(() => setCopiedCode(false), 3000);
+                  } catch {
+                    // ignore
+                  }
+                }}
+                className="px-3.5 py-2 bg-carbon-800 hover:bg-carbon-750 border border-carbon-600 text-white rounded text-xs font-mono font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
+              >
+                {copiedCode ? (
+                  <>
+                    <Check className="w-3.5 h-3.5 text-classified-terminal" />
+                    <span className="text-classified-terminal">CODE COPIED!</span>
+                  </>
+                ) : (
+                  <>
+                    <KeyRound className="w-3.5 h-3.5 text-classified-amber" />
+                    <span>CODE: {room.code}</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Operative Roster Panel */}
           <div className="lg:col-span-2 bg-carbon-900 border border-carbon-800 rounded-lg p-6">
             <div className="flex items-center justify-between mb-4 border-b border-carbon-800 pb-3">
@@ -747,6 +1041,7 @@ export default function RoomPage() {
             </div>
           </div>
         </div>
+      </div>
       ) : room.phase === "DEBRIEF" ? (
         /* PHASE 3: DEBRIEF VIEW (DECLASSIFIED MASTER CODEBOOK + UNMASKED IDENTITIES + REMATCH) */
         <div className="space-y-8" id="debrief-view">
@@ -1867,6 +2162,218 @@ export default function RoomPage() {
                   ))}
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* OPERATIONAL FIELD MANUAL MODAL */}
+      {isManualOpen && (
+        <div
+          id="field-manual-modal"
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-200"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setIsManualOpen(false);
+          }}
+        >
+          <div className="bg-carbon-900 border-2 border-carbon-700 rounded-lg max-w-2xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden font-mono">
+            {/* Modal Header */}
+            <div className="p-4 sm:p-5 bg-carbon-950 border-b border-carbon-800 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <BookOpen className="w-5 h-5 text-classified-amber shrink-0" />
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm sm:text-base font-bold text-white uppercase tracking-wider">
+                      Operational Field Manual
+                    </h3>
+                    <span className="classified-stamp text-[9px] text-classified-amber border-classified-amber py-0.2 px-1">
+                      TOP SECRET
+                    </span>
+                  </div>
+                  <p className="text-[10px] sm:text-[11px] text-gray-500">
+                    DIRECTORATE OF ESPIONAGE OPERATIONS // STANDARD OPERATING DIRECTIVES
+                  </p>
+                </div>
+              </div>
+              <button
+                id="close-field-manual-btn"
+                onClick={() => setIsManualOpen(false)}
+                className="p-1.5 text-gray-400 hover:text-white hover:bg-carbon-800 rounded transition-colors"
+                aria-label="Close Field Manual"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body - Scrollable */}
+            <div className="p-5 sm:p-6 overflow-y-auto space-y-6 text-xs text-gray-300">
+              {/* SECTION 1: FIELD AGENT DIRECTIVES (Always open & visible to all) */}
+              <div
+                id="field-agent-directives"
+                className="border border-carbon-700 bg-carbon-950/60 rounded-lg p-4 space-y-3"
+              >
+                <div className="flex items-center justify-between border-b border-carbon-800 pb-2">
+                  <div className="flex items-center gap-2 font-bold text-classified-terminal uppercase tracking-wider text-sm">
+                    <Users className="w-4 h-4" />
+                    <h4>Field Agent Directives (General Operations)</h4>
+                  </div>
+                  <span className="text-[10px] bg-green-950 text-classified-terminal border border-green-800 px-2 py-0.5 rounded font-bold">
+                    STANDARD PROTOCOL
+                  </span>
+                </div>
+                <p className="text-gray-400 leading-relaxed">
+                  All operatives are deployed into either{" "}
+                  <strong className="text-red-400">Crimson Pact (Red)</strong> or{" "}
+                  <strong className="text-blue-400">Cobalt Alliance (Blue)</strong>. Each operative is secretly assigned exactly one classified code word.
+                </p>
+                <ul className="space-y-2 list-disc list-inside text-gray-300 pl-1 leading-relaxed">
+                  <li>
+                    <strong className="text-white">Primary Mission Objective:</strong> Assemble all{" "}
+                    <strong>{players.length || 6}</strong> secret code words across both factions (your team&apos;s words + enemy words). You must earn teammates&apos; trust to share allied words while using deductive interrogation to uncover enemy words.
+                  </li>
+                  <li>
+                    <strong className="text-white">Redaction & Anti-Peeking:</strong> Your secret code word is blacked out by default. Use the{" "}
+                    <span className="text-classified-amber font-bold">&quot;Hold to Decrypt&quot;</span> button to reveal it. Release immediately to re-conceal. Never share your word carelessly!
+                  </li>
+                  <li>
+                    <strong className="text-white">Beware The Embedded Mole:</strong> One of your apparent teammates is an enemy double-agent! They have full access to your Team Radio, but are secretly feeding intel to the opposing Spymaster.
+                  </li>
+                  <li>
+                    <strong className="text-white">50% Midpoint Theme Intercept:</strong> Halfway through the mission timeline, Central Command declassifies the{" "}
+                    <span className="text-classified-amber font-bold">Secret Theme</span> uniting all genuine words. Cross-reference all claimed words against this theme to identify false leads and expose liars.
+                  </li>
+                  <li>
+                    <strong className="text-white">Verdict Deliberation & Scoring (+1 / 0):</strong> In the final 60-minute Verdict phase, propose candidate words on the collaborative board and upvote nominations. Teams score{" "}
+                    <strong className="text-classified-terminal">+1 point</strong> for each correct word, and{" "}
+                    <strong>0 points</strong> for incorrect guesses (no penalty).
+                  </li>
+                </ul>
+              </div>
+
+              {/* SECTION 2: SPYMASTER DIRECTIVES (Collapsible // For Spymaster eyes) */}
+              <div
+                id="spymaster-directives"
+                className="border border-amber-900/60 bg-carbon-950/60 rounded-lg overflow-hidden"
+              >
+                <button
+                  id="spymaster-directives-toggle"
+                  onClick={() => setIsSpymasterExpanded(!isSpymasterExpanded)}
+                  className="w-full p-4 flex items-center justify-between hover:bg-carbon-850/60 transition-colors text-left"
+                >
+                  <div className="flex items-center gap-2 font-bold text-classified-amber uppercase tracking-wider text-sm">
+                    <Lock className="w-4 h-4" />
+                    <h4>Spymaster Directives</h4>
+                    <span className="text-[10px] bg-amber-950/80 text-classified-amber border border-amber-800 px-2 py-0.5 rounded font-bold ml-2">
+                      COMMAND CLEARANCE
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-xs text-gray-400">
+                    <span>{isSpymasterExpanded ? "COLLAPSE" : "EXPAND DIRECTIVES"}</span>
+                    {isSpymasterExpanded ? (
+                      <ChevronUp className="w-4 h-4 text-classified-amber" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4 text-classified-amber" />
+                    )}
+                  </div>
+                </button>
+
+                {isSpymasterExpanded && (
+                  <div
+                    id="spymaster-directives-content"
+                    className="p-4 border-t border-carbon-800 space-y-3 bg-carbon-900/50 animate-in fade-in duration-150"
+                  >
+                    <p className="text-gray-400 leading-relaxed">
+                      Exactly one Spymaster commands each faction. Spymasters hold exclusive verdict submission power and must orchestrate deep-cover espionage.
+                    </p>
+                    <ul className="space-y-2 list-disc list-inside text-gray-300 pl-1 leading-relaxed">
+                      <li>
+                        <strong className="text-white">Exclusive Lock-In Authority:</strong> While field agents propose words, only the Spymaster can lock in the official team verdict. You must submit up to{" "}
+                        <strong>{players.length || 6}</strong> code words (including your own team&apos;s code words!).
+                      </li>
+                      <li>
+                        <strong className="text-white">Covert Mole Coordination:</strong> Your faction has an undercover Mole embedded inside the enemy team. Contact operatives via 1-on-1 Direct Line and click{" "}
+                        <span className="text-classified-amber font-bold">&quot;Verify Operative Credentials&quot;</span>. Once verified, you receive a permanent{" "}
+                        <span className="text-classified-terminal font-bold">Confirmed Asset Receipt</span>.
+                      </li>
+                      <li>
+                        <strong className="text-white">Intelligence Extraction:</strong> Coordinate covertly with your Mole via 1-on-1 DMs to extract the enemy team&apos;s secret code words and sow disinformation.
+                      </li>
+                      <li>
+                        <strong className="text-white">Tiebreaker Mole Indictment (+2 Points):</strong> If both teams achieve identical word scores, the tie is broken by the Mole Indictment. Select the operative you suspect is an enemy Mole. An accurate indictment awards{" "}
+                        <strong className="text-classified-terminal">+2 bonus points</strong>!
+                      </li>
+                    </ul>
+                  </div>
+                )}
+              </div>
+
+              {/* SECTION 3: COVERT MOLE DIRECTIVES (Collapsible // For Deep-Cover Infiltrators) */}
+              <div
+                id="mole-directives"
+                className="border border-red-900/60 bg-carbon-950/60 rounded-lg overflow-hidden"
+              >
+                <button
+                  id="mole-directives-toggle"
+                  onClick={() => setIsMoleExpanded(!isMoleExpanded)}
+                  className="w-full p-4 flex items-center justify-between hover:bg-carbon-850/60 transition-colors text-left"
+                >
+                  <div className="flex items-center gap-2 font-bold text-red-400 uppercase tracking-wider text-sm">
+                    <UserX className="w-4 h-4 text-red-500" />
+                    <h4>Covert Mole Directives</h4>
+                    <span className="text-[10px] bg-red-950/80 text-red-300 border border-red-800 px-2 py-0.5 rounded font-bold ml-2">
+                      DEEP-COVER INFILTRATION
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-xs text-gray-400">
+                    <span>{isMoleExpanded ? "COLLAPSE" : "EXPAND DIRECTIVES"}</span>
+                    {isMoleExpanded ? (
+                      <ChevronUp className="w-4 h-4 text-red-400" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4 text-red-400" />
+                    )}
+                  </div>
+                </button>
+
+                {isMoleExpanded && (
+                  <div
+                    id="mole-directives-content"
+                    className="p-4 border-t border-carbon-800 space-y-3 bg-carbon-900/50 animate-in fade-in duration-150"
+                  >
+                    <p className="text-gray-400 leading-relaxed">
+                      You are a deep-cover sleeper operative. Your apparent cover places you on the enemy faction, but your true allegiance belongs to your home team.
+                    </p>
+                    <ul className="space-y-2 list-disc list-inside text-gray-300 pl-1 leading-relaxed">
+                      <li>
+                        <strong className="text-white">The Golden Rule of Victory:</strong>{" "}
+                        <span className="text-classified-terminal font-bold">You win if and only if your ACTUAL faction wins!</span> Helping your apparent cover team win will result in your defeat.
+                      </li>
+                      <li>
+                        <strong className="text-white">Sabotage & Infiltration:</strong> Blend in on your apparent team&apos;s Team Radio. Feed them plausible false words that fit the theme to waste their guess slots, and withhold genuine words.
+                      </li>
+                      <li>
+                        <strong className="text-white">Screen-Share Safe Handshake:</strong> When your true Spymaster challenges your credentials via 1-on-1 DM, click{" "}
+                        <span className="text-classified-terminal font-bold">&quot;Transmit Counter-Signature&quot;</span>. An emerald confirmation toast will appear and{" "}
+                        <span className="text-classified-terminal font-bold">self-destruct after 3 seconds</span>. Your screen retains zero persistent badges, ensuring you can safely screen-share without blowing your cover!
+                      </li>
+                      <li>
+                        <strong className="text-white">Anti-Forensic Burn Protocol:</strong> After transmitting secrets to your true Spymaster in 1-on-1 DMs, click the{" "}
+                        <span className="text-red-400 font-bold">&quot;Burn Conversation&quot;</span> button to incinerate all message logs.
+                      </li>
+                    </ul>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 bg-carbon-950 border-t border-carbon-800 flex items-center justify-between text-[11px] text-gray-500">
+              <span>SECURITY LEVEL: TOP SECRET // OPERATIONAL ARCHIVE</span>
+              <button
+                onClick={() => setIsManualOpen(false)}
+                className="px-4 py-1.5 bg-carbon-800 hover:bg-carbon-700 text-white rounded font-mono uppercase text-xs tracking-wider transition-colors"
+              >
+                DISMISS MANUAL
+              </button>
             </div>
           </div>
         </div>

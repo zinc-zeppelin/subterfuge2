@@ -20,7 +20,7 @@ export async function POST(
 
     let sessionToken = req.headers.get("x-session-token");
     if (!sessionToken) {
-      sessionToken = req.cookies.get("subterfuge_session")?.value || randomUUID();
+      sessionToken = randomUUID();
     }
 
     const { room, player } = gameStore.joinRoom({
@@ -32,10 +32,10 @@ export async function POST(
     const response = NextResponse.json({
       roomCode: room.code,
       playerId: player.id,
-      sessionToken,
+      sessionToken: player.sessionToken,
     });
 
-    response.cookies.set("subterfuge_session", sessionToken, {
+    response.cookies.set("subterfuge_session", player.sessionToken, {
       path: "/",
       httpOnly: false,
       sameSite: "lax",

@@ -151,16 +151,22 @@ class GameStore {
     }
 
     // Check if player is reconnecting with same session token
-    const existing = room.players.find((p) => p.sessionToken === params.sessionToken);
+    let sessionToken = params.sessionToken;
+    const existing = room.players.find((p) => p.sessionToken === sessionToken);
     if (existing) {
-      return { room, player: existing };
+      if (existing.displayName.toLowerCase() === params.playerName.trim().toLowerCase()) {
+        return { room, player: existing };
+      }
+      // If someone joins with a different name but happens to share a session token (e.g. shared browser/cookie),
+      // allocate a fresh session token so both players can coexist!
+      sessionToken = randomUUID();
     }
 
     const playerId = randomUUID();
     const player: Player = {
       id: playerId,
       roomId: room.id,
-      sessionToken: params.sessionToken,
+      sessionToken,
       displayName: params.playerName.trim(),
       isReady: false,
       isHost: false,
@@ -168,7 +174,7 @@ class GameStore {
     };
 
     room.players.push(player);
-    data.sessions[params.sessionToken] = { roomCode: upperCode, playerId };
+    data.sessions[sessionToken] = { roomCode: upperCode, playerId };
 
     this.save(data);
     return { room, player };

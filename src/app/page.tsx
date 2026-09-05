@@ -35,8 +35,9 @@ function HomeContent() {
         body: JSON.stringify({ hostName: callsign }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to establish operation");
-
+      if (typeof window !== "undefined" && data.sessionToken) {
+        sessionStorage.setItem(`subterfuge_session_${data.roomCode}`, data.sessionToken);
+      }
       router.push(`/room/${data.roomCode}`);
     } catch (err: any) {
       setError(err.message);
@@ -67,6 +68,9 @@ function HomeContent() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to access operation");
 
+      if (typeof window !== "undefined" && data.sessionToken) {
+        sessionStorage.setItem(`subterfuge_session_${code}`, data.sessionToken);
+      }
       router.push(`/room/${code}`);
     } catch (err: any) {
       setError(err.message);
