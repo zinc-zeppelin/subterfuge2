@@ -20,7 +20,7 @@ export async function POST(
       );
     }
 
-    const room = gameStore.rematchOperation(code, sessionToken);
+    const room = await gameStore.rematchOperation(code, sessionToken);
     return NextResponse.json({ success: true, roomCode: room.code });
   } catch (error: any) {
     const status = error.message.includes("UNAUTHORIZED") ? 403 : 400;

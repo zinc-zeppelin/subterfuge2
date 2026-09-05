@@ -20,7 +20,7 @@ export async function POST(
       );
     }
 
-    const result = gameStore.leaveRoom({ code, sessionToken });
+    const result = await gameStore.leaveRoom({ code, sessionToken });
 
     const response = NextResponse.json(result);
     response.cookies.delete("subterfuge_session");

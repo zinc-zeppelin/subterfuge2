@@ -23,7 +23,7 @@ export async function GET(
     const channelType = searchParams.get("channel") as ChannelType | null;
     const peerId = searchParams.get("peerId") || undefined;
 
-    const messages = gameStore.getMessages({
+    const messages = await gameStore.getMessages({
       code,
       sessionToken,
       channelType: channelType || undefined,
@@ -71,7 +71,7 @@ export async function POST(
       );
     }
 
-    const message = gameStore.sendMessage({
+    const message = await gameStore.sendMessage({
       code,
       sessionToken,
       channelType,

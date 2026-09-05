@@ -30,7 +30,7 @@ export async function POST(
       sessionToken = randomUUID();
     }
 
-    const { room, player } = gameStore.joinRoom({
+    const { room, player } = await gameStore.joinRoom({
       code,
       playerName,
       sessionToken,

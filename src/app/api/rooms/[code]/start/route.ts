@@ -18,8 +18,8 @@ export async function POST(
       );
     }
 
-    const room = gameStore.startOperation(code, sessionToken);
-    const clientState = gameStore.getClientGameState(code, sessionToken);
+    const room = await gameStore.startOperation(code, sessionToken);
+    const clientState = await gameStore.getClientGameState(code, sessionToken);
 
     return NextResponse.json({
       success: true,

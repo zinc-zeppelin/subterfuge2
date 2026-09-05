@@ -30,7 +30,7 @@ export async function POST(
       );
     }
 
-    const challenge = gameStore.initiateMoleChallenge({
+    const challenge = await gameStore.initiateMoleChallenge({
       code,
       sessionToken,
       targetPlayerId,

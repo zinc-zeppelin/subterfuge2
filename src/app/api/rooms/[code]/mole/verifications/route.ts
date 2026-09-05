@@ -20,7 +20,7 @@ export async function GET(
       );
     }
 
-    const verifications = gameStore.getMoleVerifications(code, sessionToken);
+    const verifications = await gameStore.getMoleVerifications(code, sessionToken);
     return NextResponse.json({ verifications });
   } catch (error: any) {
     const status = error.message.includes("UNAUTHORIZED") ? 403 : 400;

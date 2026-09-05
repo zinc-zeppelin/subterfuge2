@@ -29,7 +29,7 @@ export async function POST(
       );
     }
 
-    const result = gameStore.kickPlayer({
+    const result = await gameStore.kickPlayer({
       code,
       hostSessionToken: sessionToken,
       targetPlayerId,

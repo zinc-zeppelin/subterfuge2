@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
       sessionToken = randomUUID();
     }
 
-    const { room, host } = gameStore.createRoom({
+    const { room, host } = await gameStore.createRoom({
       hostName,
       sessionToken,
       durationHours: Number(durationHours) || 24,

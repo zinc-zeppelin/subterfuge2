@@ -1,3 +1,4 @@
+import { Redis } from "@upstash/redis";
 import {
   Room,
   Player,
@@ -27,14 +28,29 @@ interface StoreData {
 class GameStore {
   private dataDir: string;
   private filePath: string;
+  private redis: Redis | null = null;
 
   constructor() {
     this.dataDir = path.join(process.cwd(), ".data");
     this.filePath = path.join(this.dataDir, "game-store.json");
-    this.ensureFile();
+
+    const redisUrl = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
+    const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
+
+    if (redisUrl && redisToken) {
+      this.redis = new Redis({
+        url: redisUrl,
+        token: redisToken,
+      });
+      console.log("[GameStore] Active Engine: Upstash Redis (Distributed HA)");
+    } else {
+      this.ensureFile();
+      console.log("[GameStore] Active Engine: Local File (.data/game-store.json)");
+    }
   }
 
   private ensureFile(): void {
+    if (this.redis) return;
     if (!fs.existsSync(this.dataDir)) {
       fs.mkdirSync(this.dataDir, { recursive: true });
     }
@@ -50,11 +66,30 @@ class GameStore {
     }
   }
 
-  private load(): StoreData {
+  private async load(): Promise<StoreData> {
+    if (this.redis) {
+      try {
+        const data = await this.redis.get<StoreData>("subterfuge:store");
+        if (data) {
+          if (!data.rooms) data.rooms = {};
+          if (!data.sessions) data.sessions = {};
+          if (!data.messages) data.messages = {};
+          if (!data.moleVerifications) data.moleVerifications = {};
+          if (!data.challenges) data.challenges = {};
+          return data;
+        }
+      } catch (err) {
+        console.error("[GameStore] Redis load error, falling back to empty store", err);
+      }
+      return { rooms: {}, sessions: {}, messages: {}, moleVerifications: {}, challenges: {} };
+    }
+
     this.ensureFile();
     try {
       const raw = fs.readFileSync(this.filePath, "utf-8");
       const parsed = JSON.parse(raw);
+      if (!parsed.rooms) parsed.rooms = {};
+      if (!parsed.sessions) parsed.sessions = {};
       if (!parsed.messages) parsed.messages = {};
       if (!parsed.moleVerifications) parsed.moleVerifications = {};
       if (!parsed.challenges) parsed.challenges = {};
@@ -64,7 +99,16 @@ class GameStore {
     }
   }
 
-  private save(data: StoreData): void {
+  private async save(data: StoreData): Promise<void> {
+    if (this.redis) {
+      try {
+        await this.redis.set("subterfuge:store", data, { ex: 172800 });
+      } catch (err) {
+        console.error("[GameStore] Redis save error", err);
+      }
+      return;
+    }
+
     this.ensureFile();
     const tmpPath = `${this.filePath}.tmp.${randomUUID()}`;
     fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2), "utf-8");
@@ -81,13 +125,13 @@ class GameStore {
     return code;
   }
 
-  public createRoom(params: {
+  public async createRoom(params: {
     hostName: string;
     sessionToken: string;
     durationHours?: number;
     verdictDurationMinutes?: number;
-  }): { room: Room; host: Player } {
-    const data = this.load();
+  }): Promise<{ room: Room; host: Player }> {
+    const data = await this.load();
 
     let code = this.generateRoomCode();
     while (data.rooms[code]) {
@@ -121,21 +165,21 @@ class GameStore {
     data.rooms[code.toUpperCase()] = room;
     data.sessions[params.sessionToken] = { roomCode: code.toUpperCase(), playerId: hostId };
 
-    this.save(data);
+    await this.save(data);
     return { room, host };
   }
 
-  public getRoom(code: string): Room | undefined {
-    const data = this.load();
+  public async getRoom(code: string): Promise<Room | undefined> {
+    const data = await this.load();
     return data.rooms[code.toUpperCase()];
   }
 
-  public joinRoom(params: {
+  public async joinRoom(params: {
     code: string;
     playerName: string;
     sessionToken: string;
-  }): { room: Room; player: Player } {
-    const data = this.load();
+  }): Promise<{ room: Room; player: Player }> {
+    const data = await this.load();
     const upperCode = params.code.toUpperCase();
     const room = data.rooms[upperCode];
 
@@ -190,12 +234,12 @@ class GameStore {
     room.players.push(player);
     data.sessions[sessionToken] = { roomCode: upperCode, playerId };
 
-    this.save(data);
+    await this.save(data);
     return { room, player };
   }
 
-  public toggleReady(code: string, playerId?: string, sessionToken?: string): Player {
-    const data = this.load();
+  public async toggleReady(code: string, playerId?: string, sessionToken?: string): Promise<Player> {
+    const data = await this.load();
     const upperCode = code.toUpperCase();
     const room = data.rooms[upperCode];
     if (!room) throw new Error("Room not found");
@@ -211,12 +255,12 @@ class GameStore {
     }
 
     player.isReady = !player.isReady;
-    this.save(data);
+    await this.save(data);
     return player;
   }
 
-  public startOperation(code: string, sessionToken: string): Room {
-    const data = this.load();
+  public async startOperation(code: string, sessionToken: string): Promise<Room> {
+    const data = await this.load();
     const upperCode = code.toUpperCase();
     const room = data.rooms[upperCode];
     if (!room) throw new Error("Room not found");
@@ -316,12 +360,12 @@ class GameStore {
     room.endTime = new Date(now.getTime() + durationMs).toISOString();
     room.phase = "INFILTRATION";
 
-    this.save(data);
+    await this.save(data);
     return room;
   }
 
-  public getClientGameState(code: string, sessionToken: string): ClientGameState {
-    const data = this.load();
+  public async getClientGameState(code: string, sessionToken: string): Promise<ClientGameState> {
+    const data = await this.load();
     const upperCode = code.toUpperCase();
     const room = data.rooms[upperCode];
     if (!room) throw new Error("Room not found");
@@ -340,7 +384,7 @@ class GameStore {
       room.phase = "VERDICT";
       const verdictMs = (room.verdictDurationMinutes || 60) * 60 * 1000;
       room.verdictEndTime = new Date(now.getTime() + verdictMs).toISOString();
-      this.save(data);
+      await this.save(data);
     }
 
     // Auto transition to DEBRIEF phase if verdict countdown expired
@@ -382,7 +426,7 @@ class GameStore {
         room.winner = "DRAW";
       }
 
-      this.save(data);
+      await this.save(data);
     }
 
     const isDebrief = room.phase === "DEBRIEF";
@@ -458,14 +502,14 @@ class GameStore {
     };
   }
 
-  public sendMessage(params: {
+  public async sendMessage(params: {
     code: string;
     sessionToken: string;
     channelType: ChannelType;
     content: string;
     recipientId?: string;
-  }): Message {
-    const data = this.load();
+  }): Promise<Message> {
+    const data = await this.load();
     const upperCode = params.code.toUpperCase();
     const room = data.rooms[upperCode];
     if (!room) throw new Error("Room not found");
@@ -514,17 +558,17 @@ class GameStore {
     }
     data.messages[upperCode].push(message);
 
-    this.save(data);
+    await this.save(data);
     return message;
   }
 
-  public getMessages(params: {
+  public async getMessages(params: {
     code: string;
     sessionToken: string;
     channelType?: ChannelType;
     peerId?: string;
-  }): Message[] {
-    const data = this.load();
+  }): Promise<Message[]> {
+    const data = await this.load();
     const upperCode = params.code.toUpperCase();
     const room = data.rooms[upperCode];
     if (!room) throw new Error("Room not found");
@@ -566,12 +610,12 @@ class GameStore {
     });
   }
 
-  public burnConversation(params: {
+  public async burnConversation(params: {
     code: string;
     sessionToken: string;
     peerId: string;
-  }): { success: boolean; count: number } {
-    const data = this.load();
+  }): Promise<{ success: boolean; count: number }> {
+    const data = await this.load();
     const upperCode = params.code.toUpperCase();
     const room = data.rooms[upperCode];
     if (!room) throw new Error("Room not found");
@@ -591,16 +635,16 @@ class GameStore {
     });
 
     const deletedCount = initialCount - data.messages[upperCode].length;
-    this.save(data);
+    await this.save(data);
     return { success: true, count: deletedCount };
   }
 
-  public initiateMoleChallenge(params: {
+  public async initiateMoleChallenge(params: {
     code: string;
     sessionToken: string;
     targetPlayerId: string;
-  }): MoleChallenge {
-    const data = this.load();
+  }): Promise<MoleChallenge> {
+    const data = await this.load();
     const upperCode = params.code.toUpperCase();
     const room = data.rooms[upperCode];
     if (!room) throw new Error("Room not found");
@@ -643,17 +687,17 @@ class GameStore {
     };
 
     data.challenges[upperCode].push(challenge);
-    this.save(data);
+    await this.save(data);
     return challenge;
   }
 
-  public respondMoleChallenge(params: {
+  public async respondMoleChallenge(params: {
     code: string;
     sessionToken: string;
     challengeId: string;
     action: "ACCEPT" | "DENY";
-  }): { success: boolean; isMole: boolean; message: string } {
-    const data = this.load();
+  }): Promise<{ success: boolean; isMole: boolean; message: string }> {
+    const data = await this.load();
     const upperCode = params.code.toUpperCase();
     const room = data.rooms[upperCode];
     if (!room) throw new Error("Room not found");
@@ -675,7 +719,7 @@ class GameStore {
 
     if (params.action === "DENY") {
       challenge.status = "DENIED";
-      this.save(data);
+      await this.save(data);
       return { success: false, isMole: false, message: "Clearance Denied: Counter-signature declined" };
     }
 
@@ -701,17 +745,17 @@ class GameStore {
           verifiedAt: new Date().toISOString(),
         });
       }
-      this.save(data);
+      await this.save(data);
       return { success: true, isMole: true, message: "Operative Verified. Channel Secured." };
     } else {
       challenge.status = "DENIED";
-      this.save(data);
+      await this.save(data);
       return { success: false, isMole: false, message: "Clearance Denied: Invalid Counter-Signature" };
     }
   }
 
-  public getMoleVerifications(code: string, sessionToken: string): MoleVerification[] {
-    const data = this.load();
+  public async getMoleVerifications(code: string, sessionToken: string): Promise<MoleVerification[]> {
+    const data = await this.load();
     const upperCode = code.toUpperCase();
     const room = data.rooms[upperCode];
     if (!room) throw new Error("Room not found");
@@ -722,8 +766,8 @@ class GameStore {
     return (data.moleVerifications[upperCode] || []).filter((v) => v.requesterId === caller.id);
   }
 
-  public warpTimer(params: { code: string; target: "MIDPOINT" | "VERDICT" }): Room {
-    const data = this.load();
+  public async warpTimer(params: { code: string; target: "MIDPOINT" | "VERDICT" }): Promise<Room> {
+    const data = await this.load();
     const upperCode = params.code.toUpperCase();
     const room = data.rooms[upperCode];
     if (!room) throw new Error("Room not found");
@@ -744,16 +788,16 @@ class GameStore {
       room.verdictEndTime = new Date(now.getTime() + verdictMs).toISOString();
     }
 
-    this.save(data);
+    await this.save(data);
     return room;
   }
 
-  public addWordSuggestion(params: {
+  public async addWordSuggestion(params: {
     code: string;
     sessionToken: string;
     word: string;
-  }): WordSuggestion {
-    const data = this.load();
+  }): Promise<WordSuggestion> {
+    const data = await this.load();
     const upperCode = params.code.toUpperCase();
     const room = data.rooms[upperCode];
     if (!room) throw new Error("Room not found");
@@ -783,7 +827,7 @@ class GameStore {
       if (!existing.votes.includes(caller.id)) {
         existing.votes.push(caller.id);
       }
-      this.save(data);
+      await this.save(data);
       return existing;
     }
 
@@ -797,16 +841,16 @@ class GameStore {
     };
 
     room.suggestions[caller.apparentTeam].push(suggestion);
-    this.save(data);
+    await this.save(data);
     return suggestion;
   }
 
-  public voteWordSuggestion(params: {
+  public async voteWordSuggestion(params: {
     code: string;
     sessionToken: string;
     suggestionId: string;
-  }): WordSuggestion {
-    const data = this.load();
+  }): Promise<WordSuggestion> {
+    const data = await this.load();
     const upperCode = params.code.toUpperCase();
     const room = data.rooms[upperCode];
     if (!room) throw new Error("Room not found");
@@ -828,17 +872,17 @@ class GameStore {
       suggestion.votes.push(caller.id);
     }
 
-    this.save(data);
+    await this.save(data);
     return suggestion;
   }
 
-  public submitTeamVerdict(params: {
+  public async submitTeamVerdict(params: {
     code: string;
     sessionToken: string;
     guesses: string[];
     moleIndictmentId?: string;
-  }): { verdict: TeamVerdict; room: Room } {
-    const data = this.load();
+  }): Promise<{ verdict: TeamVerdict; room: Room }> {
+    const data = await this.load();
     const upperCode = params.code.toUpperCase();
     const room = data.rooms[upperCode];
     if (!room) throw new Error("Room not found");
@@ -943,12 +987,12 @@ class GameStore {
       room.phase = "DEBRIEF";
     }
 
-    this.save(data);
+    await this.save(data);
     return { verdict, room };
   }
 
-  public rematchOperation(code: string, sessionToken: string): Room {
-    const data = this.load();
+  public async rematchOperation(code: string, sessionToken: string): Promise<Room> {
+    const data = await this.load();
     const upperCode = code.toUpperCase();
     const room = data.rooms[upperCode];
     if (!room) throw new Error("Room not found");
@@ -981,15 +1025,15 @@ class GameStore {
     data.challenges[upperCode] = [];
     data.moleVerifications[upperCode] = [];
 
-    this.save(data);
+    await this.save(data);
     return room;
   }
 
-  public leaveRoom(params: {
+  public async leaveRoom(params: {
     code: string;
     sessionToken: string;
-  }): { success: boolean; roomClosed?: boolean; newHostId?: string } {
-    const data = this.load();
+  }): Promise<{ success: boolean; roomClosed?: boolean; newHostId?: string }> {
+    const data = await this.load();
     const upperCode = params.code.toUpperCase();
     const room = data.rooms[upperCode];
     if (!room) throw new Error("OPERATION_NOT_FOUND: Room does not exist");
@@ -1006,25 +1050,25 @@ class GameStore {
       if (room.players.length > 0) {
         room.hostId = room.players[0].id;
         room.players[0].isHost = true;
-        this.save(data);
+        await this.save(data);
         return { success: true, newHostId: room.hostId };
       } else {
         delete data.rooms[upperCode];
-        this.save(data);
+        await this.save(data);
         return { success: true, roomClosed: true };
       }
     }
 
-    this.save(data);
+    await this.save(data);
     return { success: true };
   }
 
-  public kickPlayer(params: {
+  public async kickPlayer(params: {
     code: string;
     hostSessionToken: string;
     targetPlayerId: string;
-  }): { success: boolean } {
-    const data = this.load();
+  }): Promise<{ success: boolean }> {
+    const data = await this.load();
     const upperCode = params.code.toUpperCase();
     const room = data.rooms[upperCode];
     if (!room) throw new Error("OPERATION_NOT_FOUND: Room does not exist");
@@ -1043,11 +1087,11 @@ class GameStore {
     if (targetIndex === -1) throw new Error("OPERATIVE_NOT_FOUND: Operative not found in roster");
 
     room.players.splice(targetIndex, 1);
-    this.save(data);
+    await this.save(data);
     return { success: true };
   }
 
-  public reset(): void {
+  public async reset(): Promise<void> {
     const initial: StoreData = {
       rooms: {},
       sessions: {},
@@ -1055,7 +1099,7 @@ class GameStore {
       moleVerifications: {},
       challenges: {},
     };
-    this.save(initial);
+    await this.save(initial);
   }
 }
 

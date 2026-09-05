@@ -17,7 +17,7 @@ export async function POST(
       req.cookies.get("subterfuge_session")?.value;
 
     if (process.env.NODE_ENV === "production") {
-      const room = gameStore.getRoom(code);
+      const room = await gameStore.getRoom(code);
       if (!room) return NextResponse.json({ error: "Room not found" }, { status: 404 });
       const host = room.players.find((p) => p.id === room.hostId);
       if (!host || host.sessionToken !== sessionToken) {
@@ -32,7 +32,7 @@ export async function POST(
       );
     }
 
-    const room = gameStore.warpTimer({ code, target });
+    const room = await gameStore.warpTimer({ code, target });
     return NextResponse.json({ success: true, phase: room.phase });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 400 });

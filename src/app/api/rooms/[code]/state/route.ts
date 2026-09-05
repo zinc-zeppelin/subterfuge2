@@ -13,7 +13,7 @@ export async function GET(
       req.cookies.get("subterfuge_session")?.value;
 
     if (!sessionToken) {
-      const room = gameStore.getRoom(code);
+      const room = await gameStore.getRoom(code);
       if (room) {
         return NextResponse.json(
           {
@@ -31,7 +31,7 @@ export async function GET(
       );
     }
 
-    const state = gameStore.getClientGameState(code, sessionToken);
+    const state = await gameStore.getClientGameState(code, sessionToken);
     return NextResponse.json(state);
   } catch (error: any) {
     const status = error.message.includes("not found") ? 404 : 401;

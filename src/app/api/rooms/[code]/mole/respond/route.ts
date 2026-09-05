@@ -30,7 +30,7 @@ export async function POST(
       );
     }
 
-    const result = gameStore.respondMoleChallenge({
+    const result = await gameStore.respondMoleChallenge({
       code,
       sessionToken,
       challengeId,

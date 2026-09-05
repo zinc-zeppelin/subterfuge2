@@ -21,7 +21,7 @@ export async function POST(
     const body = await req.json().catch(() => ({}));
     const { playerId } = body;
 
-    const player = gameStore.toggleReady(code, playerId, sessionToken);
+    const player = await gameStore.toggleReady(code, playerId, sessionToken);
     return NextResponse.json({ success: true, isReady: player.isReady });
   } catch (error: any) {
     const status = error.message.includes("UNAUTHORIZED")

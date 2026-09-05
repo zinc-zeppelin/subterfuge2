@@ -28,7 +28,7 @@ export async function POST(
       );
     }
 
-    const result = gameStore.burnConversation({
+    const result = await gameStore.burnConversation({
       code,
       sessionToken,
       peerId,

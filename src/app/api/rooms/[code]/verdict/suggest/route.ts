@@ -30,7 +30,7 @@ export async function POST(
       );
     }
 
-    const suggestion = gameStore.addWordSuggestion({
+    const suggestion = await gameStore.addWordSuggestion({
       code,
       sessionToken,
       word,

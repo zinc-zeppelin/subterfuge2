@@ -30,7 +30,7 @@ export async function POST(
       );
     }
 
-    const result = gameStore.submitTeamVerdict({
+    const result = await gameStore.submitTeamVerdict({
       code,
       sessionToken,
       guesses,
