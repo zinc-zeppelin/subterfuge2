@@ -50,3 +50,29 @@ body {
   background-size: 100% 3px, 3px 100%;
   pointer-events: none;
 }
+
+/* Mobile Touch Ergonomics & Safari / Chrome Polish */
+html {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Eliminate iOS Safari text selection magnifier & callout on long-press */
+.no-callout {
+  -webkit-touch-callout: none !important;
+  -webkit-user-select: none !important;
+  user-select: none !important;
+  touch-action: manipulation;
+}
+
+/* Prevent iOS Safari automatic camera zoom-in on input focus */
+@media screen and (max-width: 768px) {
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* Inertia touch scrolling on iOS */
+.touch-scroll {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}

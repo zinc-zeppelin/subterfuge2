@@ -92,16 +92,26 @@ export class SixPlayerHarness {
    */
   public async toggleReady(playerIndex: number): Promise<void> {
     const op = this.sessions[playerIndex];
+    await expect(op.page.locator("#toggle-ready-btn")).toBeVisible({ timeout: 10000 });
     await op.page.click("#toggle-ready-btn");
+    await expect(op.page.locator("#toggle-ready-btn")).toContainText("CANCEL READY STATUS", { timeout: 10000 });
   }
 
   /**
    * Toggle ready status for all 6 operatives
    */
   public async setAllReady(): Promise<void> {
+    // First ensure every session has connected to the lobby
+    for (const op of this.sessions) {
+      await expect(op.page.locator("#toggle-ready-btn")).toBeVisible({ timeout: 10000 });
+    }
     for (let i = 0; i < this.sessions.length; i++) {
       await this.toggleReady(i);
     }
+    // Ensure host sees full readiness and enabled start button
+    const hostPage = this.sessions[0].page;
+    await expect(hostPage.getByText(`${this.sessions.length}/${this.sessions.length} READY`)).toBeVisible({ timeout: 15000 });
+    await expect(hostPage.locator("#start-operation-btn")).toBeEnabled({ timeout: 15000 });
   }
 
   /**

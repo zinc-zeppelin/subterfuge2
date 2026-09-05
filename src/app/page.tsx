@@ -105,7 +105,7 @@ function HomeContent() {
       )}
 
       {/* Operative Call-sign Input Card */}
-      <div className="w-full bg-carbon-900 border border-carbon-800 rounded-lg p-6 mb-8 shadow-xl">
+      <div className="w-full bg-carbon-900 border border-carbon-800 rounded-lg p-4 sm:p-6 mb-6 sm:mb-8 shadow-xl">
         <label className="block text-xs font-mono uppercase text-gray-400 mb-2 tracking-wider">
           Step 1: Declare Your Operative Call-Sign
         </label>
@@ -117,17 +117,17 @@ function HomeContent() {
             onChange={(e) => setCallsign(e.target.value)}
             placeholder="e.g. FALCON, NIGHTSHADE, CIPHER"
             maxLength={20}
-            className="w-full bg-carbon-950 border border-carbon-700 rounded px-4 py-3 text-sm font-mono text-white placeholder-gray-600 focus:outline-none focus:border-classified-amber uppercase tracking-wider"
+            className="w-full bg-carbon-950 border border-carbon-700 rounded px-4 py-3 text-base sm:text-sm font-mono text-white placeholder-gray-600 focus:outline-none focus:border-classified-amber uppercase tracking-wider min-h-[48px]"
           />
         </div>
       </div>
 
       {/* Dual Operational Portals */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 w-full">
         {/* Create Operation Card */}
-        <div className="bg-carbon-900 border border-carbon-800 rounded-lg p-6 flex flex-col justify-between hover:border-carbon-700 transition-colors">
+        <div className="bg-carbon-900 border border-carbon-800 rounded-lg p-5 sm:p-6 flex flex-col justify-between hover:border-carbon-700 transition-colors">
           <div>
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center justify-between mb-3 sm:mb-4">
               <span className="text-xs font-mono text-classified-amber uppercase tracking-wider flex items-center gap-2">
                 <Radio className="w-4 h-4" /> Directive Alpha
               </span>
@@ -135,8 +135,8 @@ function HomeContent() {
                 ORIGINATE
               </span>
             </div>
-            <h2 className="text-lg font-bold font-mono text-white mb-2">Establish Operation</h2>
-            <p className="text-xs text-gray-400 font-mono mb-6">
+            <h2 className="text-base sm:text-lg font-bold font-mono text-white mb-2">Establish Operation</h2>
+            <p className="text-xs text-gray-400 font-mono mb-4 sm:mb-6">
               Create a new encrypted room, configure operational duration (4h to 24h), and receive an Operation Code for your operatives.
             </p>
           </div>
@@ -144,16 +144,16 @@ function HomeContent() {
             id="create-room-btn"
             onClick={handleCreateRoom}
             disabled={isLoading}
-            className="w-full py-3 px-4 bg-classified-crimson hover:bg-red-800 disabled:opacity-50 text-white font-mono font-bold text-sm tracking-wider uppercase rounded transition-colors"
+            className="w-full min-h-[48px] py-3.5 px-4 bg-classified-crimson hover:bg-red-800 disabled:opacity-50 text-white font-mono font-bold text-xs sm:text-sm tracking-wider uppercase rounded transition-colors active:scale-[0.99] cursor-pointer"
           >
             {isLoading ? "ESTABLISHING..." : "COMMENCE OPERATION"}
           </button>
         </div>
 
         {/* Join Operation Card */}
-        <div className="bg-carbon-900 border border-carbon-800 rounded-lg p-6 flex flex-col justify-between hover:border-carbon-700 transition-colors">
+        <div className="bg-carbon-900 border border-carbon-800 rounded-lg p-5 sm:p-6 flex flex-col justify-between hover:border-carbon-700 transition-colors">
           <div>
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center justify-between mb-3 sm:mb-4">
               <span className="text-xs font-mono text-blue-400 uppercase tracking-wider flex items-center gap-2">
                 <KeyRound className="w-4 h-4" /> Directive Beta
               </span>
@@ -161,7 +161,7 @@ function HomeContent() {
                 INFILTRATE
               </span>
             </div>
-            <h2 className="text-lg font-bold font-mono text-white mb-2">Access Operation</h2>
+            <h2 className="text-base sm:text-lg font-bold font-mono text-white mb-2">Access Operation</h2>
             <p className="text-xs text-gray-400 font-mono mb-4">
               Enter an existing 6-character room code to join an active operational roster.
             </p>
@@ -172,14 +172,14 @@ function HomeContent() {
               onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
               placeholder="ROOM CODE (e.g. SUB94X)"
               maxLength={6}
-              className="w-full bg-carbon-950 border border-carbon-700 rounded px-4 py-2.5 text-sm font-mono text-white placeholder-gray-600 focus:outline-none focus:border-blue-500 uppercase tracking-widest mb-6"
+              className="w-full bg-carbon-950 border border-carbon-700 rounded px-4 py-2.5 text-base sm:text-sm font-mono text-white placeholder-gray-600 focus:outline-none focus:border-blue-500 uppercase tracking-widest mb-4 sm:mb-6 min-h-[48px]"
             />
           </div>
           <button
             id="join-room-btn"
             onClick={handleJoinRoom}
             disabled={isLoading}
-            className="w-full py-3 px-4 bg-classified-intelBlue hover:bg-blue-900 disabled:opacity-50 text-white font-mono font-bold text-sm tracking-wider uppercase rounded transition-colors"
+            className="w-full min-h-[48px] py-3.5 px-4 bg-classified-intelBlue hover:bg-blue-900 disabled:opacity-50 text-white font-mono font-bold text-xs sm:text-sm tracking-wider uppercase rounded transition-colors active:scale-[0.99] cursor-pointer"
           >
             {isLoading ? "AUTHENTICATING..." : "ACCESS CHANNEL"}
           </button>

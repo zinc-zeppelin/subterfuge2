@@ -102,21 +102,27 @@ test.describe("Slice 10: Jackbox-Style Personal Recovery Links, Device Auto-Resu
     await p3Page.goto(`${url}/room/${roomCode}`);
     await p3Page.fill("#join-callsign-input", "Agent-Charlie");
     await p3Page.click("#join-room-submit-btn");
+    await expect(p3Page.locator("#toggle-ready-btn")).toBeVisible({ timeout: 10000 });
 
     const p4Context = await browser.newContext();
     const p4Page = await p4Context.newPage();
     await p4Page.goto(`${url}/room/${roomCode}`);
     await p4Page.fill("#join-callsign-input", "Agent-Delta");
     await p4Page.click("#join-room-submit-btn");
+    await expect(p4Page.locator("#toggle-ready-btn")).toBeVisible({ timeout: 10000 });
 
     // All declare ready
     await p1Page.click("#toggle-ready-btn");
+    await expect(p1Page.locator("#toggle-ready-btn")).toContainText("CANCEL READY STATUS", { timeout: 10000 });
     await p2Page.click("#toggle-ready-btn");
+    await expect(p2Page.locator("#toggle-ready-btn")).toContainText("CANCEL READY STATUS", { timeout: 10000 });
     await p3Page.click("#toggle-ready-btn");
+    await expect(p3Page.locator("#toggle-ready-btn")).toContainText("CANCEL READY STATUS", { timeout: 10000 });
     await p4Page.click("#toggle-ready-btn");
+    await expect(p4Page.locator("#toggle-ready-btn")).toContainText("CANCEL READY STATUS", { timeout: 10000 });
 
     // Host commences operations
-    await expect(p1Page.locator("#start-operation-btn")).toBeEnabled({ timeout: 10000 });
+    await expect(p1Page.locator("#start-operation-btn")).toBeEnabled({ timeout: 15000 });
     await p1Page.click("#start-operation-btn");
 
     // Verify all players transition into INFILTRATION

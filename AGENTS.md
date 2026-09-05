@@ -61,7 +61,9 @@ subterfuge2/
 │       ├── slice7-full-game.spec.ts        # End-to-end operational loop + rematch
 │       ├── slice8-field-manual.spec.ts     # In-game operational field manual
 │       ├── slice9-multi-session-and-direct-join.spec.ts # Tab isolation & in-page onboarding
-│       └── slice10-recovery-link.spec.ts   # Personal recovery links & reconnect portal
+│       ├── slice10-recovery-link.spec.ts   # Personal recovery links & reconnect portal
+│       ├── slice11-lobby-management-and-sanitization.spec.ts # Host kick, leave & input bounds
+│       └── slice12-mobile-audit.spec.ts    # iOS Safari (WebKit) & Android Chrome (Chromium) audit
 └── screenshots/                            # Visual regression artifacts (verified in walkthrough.md)
 ```
 
