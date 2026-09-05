@@ -33,7 +33,7 @@ export async function POST(
     }
 
     const room = gameStore.warpTimer({ code, target });
-    return NextResponse.json({ success: true, room });
+    return NextResponse.json({ success: true, phase: room.phase });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 400 });
   }

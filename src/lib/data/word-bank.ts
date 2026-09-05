@@ -66,7 +66,7 @@ export const WORD_BANK: WordEntry[] = [
   { word: "Dead-drop", themes: ["ESPIONAGE", "CRIME"] },
   { word: "Disinformation", themes: ["ESPIONAGE", "MEDIA", "POLITICS"] },
   { word: "Operative", themes: ["ESPIONAGE", "MILITARY"] },
-  { word: "Surveillance", themes: ["ESPIONAGE", "SECURITY"] },
+  { word: "Wiretap", themes: ["ESPIONAGE", "SECURITY", "TECHNOLOGY"] },
   { word: "Alias", themes: ["ESPIONAGE", "CRIME", "IDENTITY"] },
   { word: "Alibi", themes: ["ESPIONAGE", "CRIME", "LAW"] },
 
@@ -225,9 +225,18 @@ export function getRandomTheme(): ThemeType {
  * Draw `count` unique words associated with the chosen theme
  */
 export function drawWordsForTheme(theme: string, count: number): string[] {
-  const matchingWords = WORD_BANK.filter((entry) =>
-    entry.themes.map((t) => t.toUpperCase()).includes(theme.toUpperCase())
-  );
+  const seen = new Set<string>();
+  const matchingWords: WordEntry[] = [];
+
+  for (const entry of WORD_BANK) {
+    if (entry.themes.map((t) => t.toUpperCase()).includes(theme.toUpperCase())) {
+      const normalized = entry.word.trim().toUpperCase();
+      if (!seen.has(normalized)) {
+        seen.add(normalized);
+        matchingWords.push(entry);
+      }
+    }
+  }
 
   if (matchingWords.length < count) {
     throw new Error(

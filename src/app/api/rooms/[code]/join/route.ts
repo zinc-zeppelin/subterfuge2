@@ -18,6 +18,13 @@ export async function POST(
       );
     }
 
+    if (playerName.trim().length > 20) {
+      return NextResponse.json(
+        { error: "Operative call-sign cannot exceed 20 characters" },
+        { status: 400 }
+      );
+    }
+
     let sessionToken = req.headers.get("x-session-token");
     if (!sessionToken) {
       sessionToken = randomUUID();

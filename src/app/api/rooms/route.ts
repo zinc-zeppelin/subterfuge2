@@ -14,6 +14,13 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    if (hostName.trim().length > 20) {
+      return NextResponse.json(
+        { error: "Operative call-sign cannot exceed 20 characters" },
+        { status: 400 }
+      );
+    }
+
     // Extract or generate session token
     let sessionToken = req.headers.get("x-session-token");
     if (!sessionToken) {

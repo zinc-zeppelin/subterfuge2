@@ -242,11 +242,18 @@ export default function RoomPage() {
       const res = await authFetch(`/api/rooms/${code}/state`);
       if (!res.ok) {
         if (res.status === 401) {
-          const errData = await res.json();
+          const errData = await res.json().catch(() => ({}));
           if (errData.phase) setUnauthRoomPhase(errData.phase);
-          if (typeof window !== "undefined" && localStorage.getItem(`subterfuge_session_${code}`)) {
+          if (errData.error?.includes("Unauthorized") || errData.error?.includes("UNAUTHORIZED")) {
+            if (typeof window !== "undefined") {
+              sessionStorage.removeItem(`subterfuge_session_${code}`);
+              localStorage.removeItem(`subterfuge_session_${code}`);
+            }
+            setHasSavedSession(false);
+          } else if (typeof window !== "undefined" && localStorage.getItem(`subterfuge_session_${code}`)) {
             setHasSavedSession(true);
           }
+          setGameState(null);
           setIsUnauthorized(true);
           return;
         }
@@ -461,6 +468,46 @@ export default function RoomPage() {
       setError(err.message);
     } finally {
       setIsStartingOperation(false);
+    }
+  };
+
+  const handleLeaveOperation = async () => {
+    if (!gameState || !code) return;
+    try {
+      const token = gameState.self?.sessionToken || getSessionToken();
+      await authFetch(`/api/rooms/${code}/leave`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionToken: token }),
+      });
+    } catch {
+      // ignore
+    }
+    if (typeof window !== "undefined" && code) {
+      sessionStorage.removeItem(`subterfuge_session_${code}`);
+      localStorage.removeItem(`subterfuge_session_${code}`);
+    }
+    setGameState(null);
+    setIsUnauthorized(true);
+  };
+
+  const handleKickPlayer = async (targetPlayerId: string) => {
+    if (!gameState || !code) return;
+    try {
+      const token = gameState.self?.sessionToken || getSessionToken();
+      const res = await authFetch(`/api/rooms/${code}/kick`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetPlayerId, sessionToken: token }),
+      });
+      if (res.ok) {
+        await fetchState();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setError(data.error || "Failed to dismiss operative");
+      }
+    } catch (err: any) {
+      setError(err.message || "Failed to dismiss operative");
     }
   };
 
@@ -1394,6 +1441,17 @@ export default function RoomPage() {
                         <Circle className="w-4 h-4" /> STANDBY
                       </span>
                     )}
+
+                    {self.isHost && player.id !== self.id && (
+                      <button
+                        id={`kick-player-${player.id}`}
+                        onClick={() => handleKickPlayer(player.id)}
+                        title={`Dismiss ${player.displayName}`}
+                        className="ml-2 px-2 py-1 bg-red-950/60 hover:bg-red-900 border border-classified-crimson/50 text-classified-crimson hover:text-white rounded text-[10px] font-mono uppercase tracking-wider transition-colors cursor-pointer"
+                      >
+                        DISMISS
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -1422,13 +1480,20 @@ export default function RoomPage() {
                 {self.isReady ? "CANCEL READY STATUS" : "DECLARE OPERATIONAL READY"}
               </button>
 
-              <div className="mt-3 pt-3 border-t border-carbon-800 text-center">
+              <div className="mt-3 pt-3 border-t border-carbon-800 flex flex-col items-center gap-2 text-center">
+                <button
+                  id="leave-operation-btn"
+                  onClick={handleLeaveOperation}
+                  className="text-[11px] text-classified-crimson hover:text-red-400 uppercase tracking-wider font-mono transition-colors cursor-pointer"
+                >
+                  Leave Operation / Vacate Roster Spot
+                </button>
                 <button
                   id="disconnect-station-btn"
                   onClick={handleDisconnectStation}
-                  className="text-[11px] text-gray-500 hover:text-red-400 uppercase tracking-wider font-mono transition-colors cursor-pointer"
+                  className="text-[11px] text-gray-500 hover:text-gray-400 uppercase tracking-wider font-mono transition-colors cursor-pointer"
                 >
-                  Disconnect Station / Switch Operative
+                  Disconnect Station (Keep Roster Spot)
                 </button>
               </div>
             </div>

@@ -37,7 +37,17 @@ export async function POST(
       moleIndictmentId,
     });
 
-    return NextResponse.json({ success: true, verdict: result.verdict });
+    const isDebrief = result.room.phase === "DEBRIEF";
+    const sanitizedVerdict = {
+      team: result.verdict.team,
+      submittedByName: result.verdict.submittedByName,
+      guesses: result.verdict.guesses,
+      submittedAt: result.verdict.submittedAt,
+      score: isDebrief ? result.verdict.score : undefined,
+      correctGuesses: isDebrief ? result.verdict.correctGuesses : undefined,
+    };
+
+    return NextResponse.json({ success: true, verdict: sanitizedVerdict });
   } catch (error: any) {
     const status = error.message.includes("UNAUTHORIZED") ? 403 : 400;
     return NextResponse.json({ error: error.message }, { status });

@@ -57,6 +57,20 @@ export async function POST(
     const body = await req.json();
     const { channelType, content, recipientId } = body;
 
+    if (!content || typeof content !== "string" || content.trim().length === 0) {
+      return NextResponse.json(
+        { error: "Transmission cannot be empty" },
+        { status: 400 }
+      );
+    }
+
+    if (content.length > 500) {
+      return NextResponse.json(
+        { error: "Transmission exceeds 500 characters limit" },
+        { status: 400 }
+      );
+    }
+
     const message = gameStore.sendMessage({
       code,
       sessionToken,

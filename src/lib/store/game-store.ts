@@ -11,7 +11,7 @@ import {
   TeamVerdict,
 } from "../types/game";
 import { getRandomTheme, drawWordsForTheme } from "../data/word-bank";
-import { randomUUID } from "crypto";
+import { randomUUID, randomInt } from "crypto";
 import fs from "fs";
 import path from "path";
 
@@ -72,10 +72,11 @@ class GameStore {
   }
 
   public generateRoomCode(): string {
-    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    // Jackbox standard: unambiguous consonants and digits (no vowels, no 0/O, 1/I/L)
+    const chars = "BCDFGHJKMNPQRSTVWXYZ23456789";
     let code = "";
     for (let i = 0; i < 6; i++) {
-      code += chars.charAt(Math.floor(Math.random() * chars.length));
+      code += chars.charAt(randomInt(0, chars.length));
     }
     return code;
   }
@@ -982,6 +983,68 @@ class GameStore {
 
     this.save(data);
     return room;
+  }
+
+  public leaveRoom(params: {
+    code: string;
+    sessionToken: string;
+  }): { success: boolean; roomClosed?: boolean; newHostId?: string } {
+    const data = this.load();
+    const upperCode = params.code.toUpperCase();
+    const room = data.rooms[upperCode];
+    if (!room) throw new Error("OPERATION_NOT_FOUND: Room does not exist");
+    if (room.phase !== "LOBBY") throw new Error("CANNOT_LEAVE: Operation has already commenced");
+
+    const playerIndex = room.players.findIndex((p) => p.sessionToken === params.sessionToken);
+    if (playerIndex === -1) throw new Error("UNAUTHORIZED: Operative not in room");
+
+    const leavingPlayer = room.players[playerIndex];
+    room.players.splice(playerIndex, 1);
+
+    // If leaving player was host, migrate host to oldest remaining player or delete room if empty
+    if (room.hostId === leavingPlayer.id) {
+      if (room.players.length > 0) {
+        room.hostId = room.players[0].id;
+        room.players[0].isHost = true;
+        this.save(data);
+        return { success: true, newHostId: room.hostId };
+      } else {
+        delete data.rooms[upperCode];
+        this.save(data);
+        return { success: true, roomClosed: true };
+      }
+    }
+
+    this.save(data);
+    return { success: true };
+  }
+
+  public kickPlayer(params: {
+    code: string;
+    hostSessionToken: string;
+    targetPlayerId: string;
+  }): { success: boolean } {
+    const data = this.load();
+    const upperCode = params.code.toUpperCase();
+    const room = data.rooms[upperCode];
+    if (!room) throw new Error("OPERATION_NOT_FOUND: Room does not exist");
+    if (room.phase !== "LOBBY") throw new Error("CANNOT_KICK: Operation has already commenced");
+
+    const host = room.players.find((p) => p.sessionToken === params.hostSessionToken);
+    if (!host || host.id !== room.hostId) {
+      throw new Error("UNAUTHORIZED: Only the Operation Commander can dismiss operatives");
+    }
+
+    if (params.targetPlayerId === room.hostId) {
+      throw new Error("CANNOT_KICK_HOST: Operation Commander cannot be dismissed");
+    }
+
+    const targetIndex = room.players.findIndex((p) => p.id === params.targetPlayerId);
+    if (targetIndex === -1) throw new Error("OPERATIVE_NOT_FOUND: Operative not found in roster");
+
+    room.players.splice(targetIndex, 1);
+    this.save(data);
+    return { success: true };
   }
 
   public reset(): void {
