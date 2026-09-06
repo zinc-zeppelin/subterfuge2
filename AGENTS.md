@@ -63,7 +63,8 @@ subterfuge2/
 │       ├── slice9-multi-session-and-direct-join.spec.ts # Tab isolation & in-page onboarding
 │       ├── slice10-recovery-link.spec.ts   # Personal recovery links & reconnect portal
 │       ├── slice11-lobby-management-and-sanitization.spec.ts # Host kick, leave & input bounds
-│       └── slice12-mobile-audit.spec.ts    # iOS Safari (WebKit) & Android Chrome (Chromium) audit
+│       ├── slice12-mobile-audit.spec.ts    # iOS Safari (WebKit) & Android Chrome (Chromium) audit
+│       └── slice13-playtest-improvements.spec.ts # Playtest polish, anti-shoulder-surfing & dev HUD
 └── screenshots/                            # Visual regression artifacts (verified in walkthrough.md)
 ```
 
@@ -156,7 +157,7 @@ npm run build
 # 2. Run single test suite
 npx playwright test tests/e2e/slice10-recovery-link.spec.ts
 
-# 3. Run full regression suite (all 10 slices)
+# 3. Run full regression suite (all 13 slices)
 npx playwright test
 ```
 
@@ -191,7 +192,7 @@ Project Subterfuge enforces a strict Cold War intelligence aesthetic:
 
 ## 7. Operational Etiquette for Agents
 
-1. **Do Not Break Passing Tests:** All 10 existing Playwright suites must remain 100% green.
+1. **Do Not Break Passing Tests:** All 13 Playwright test suites must remain 100% green.
 2. **Preserve Comments & Docstrings:** Do not remove existing explanatory comments when modifying files.
 3. **Follow Planning Mode:** For non-trivial architectural changes, formulate an implementation plan, obtain user alignment, execute carefully, and update `walkthrough.md`.
 4. **Keep Commits Clean & Verbose:** Commit with descriptive titles (e.g. `feat(subsystem): brief summary`) and document key decisions.
