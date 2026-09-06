@@ -116,6 +116,7 @@ export default function RoomPage() {
   const [isGodMode, setIsGodMode] = useState(false);
   const [godData, setGodData] = useState<any>(null);
   const [isDevActionLoading, setIsDevActionLoading] = useState(false);
+  const [isStreamSafe, setIsStreamSafe] = useState(false);
 
   const decryptTimerRef = useRef<NodeJS.Timeout | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
@@ -1165,7 +1166,7 @@ export default function RoomPage() {
                     <Terminal className="w-5 h-5" />
                     <span className="text-xs font-bold uppercase tracking-wider">OPERATION: {code}</span>
                   </div>
-                  <span className="classified-stamp text-[9px] text-classified-crimson border-classified-crimson py-0.2 px-1 animate-pulse">
+                  <span className="classified-stamp text-nano text-classified-crimson border-classified-crimson py-0.2 px-1 animate-pulse">
                     IN PROGRESS // {unauthRoomPhase}
                   </span>
                 </div>
@@ -1249,7 +1250,7 @@ export default function RoomPage() {
                   <Terminal className="w-5 h-5" />
                   <span className="text-xs font-bold uppercase tracking-wider">OPERATION: {code}</span>
                 </div>
-                <span className="classified-stamp text-[9px] text-classified-amber border-classified-amber py-0.2 px-1">
+                <span className="classified-stamp text-nano text-classified-amber border-classified-amber py-0.2 px-1">
                   CLEARANCE REQUIRED
                 </span>
               </div>
@@ -1279,7 +1280,7 @@ export default function RoomPage() {
                       setShowTokenFormInLobby(true);
                       setJoinError(null);
                     }}
-                    className="text-classified-terminal text-left underline cursor-pointer text-[11px] font-bold"
+                    className="text-classified-terminal text-left underline cursor-pointer text-micro font-bold"
                   >
                     Are you this operative? Click here to enter your Recovery Link or Token.
                   </button>
@@ -1361,7 +1362,7 @@ export default function RoomPage() {
                   <KeyRound className="w-3.5 h-3.5 shrink-0" />
                   <span className="font-bold">SAVED OPERATIVE CREDENTIALS DETECTED</span>
                 </div>
-                <p className="text-[11px] text-gray-400">
+                <p className="text-micro text-gray-400">
                   This device was previously deployed to this operation. You can resume your station or declare a new call-sign below.
                 </p>
                 <button
@@ -1375,7 +1376,7 @@ export default function RoomPage() {
                       fetchState();
                     }
                   }}
-                  className="w-full py-2 px-3 bg-classified-terminal hover:bg-green-400 text-black font-mono font-bold text-xs uppercase tracking-wider rounded transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                  className="w-full min-h-[44px] py-2.5 px-3 bg-classified-terminal hover:bg-green-400 text-black font-mono font-bold text-xs uppercase tracking-wider rounded transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
                 >
                   <KeyRound className="w-3.5 h-3.5" />
                   RESUME PREVIOUS STATION
@@ -1504,7 +1505,7 @@ export default function RoomPage() {
               Security Handshake Confirmed
             </div>
             <div className="font-semibold text-white">{moleToast.message}</div>
-            <div className="text-[10px] text-emerald-400/70 mt-1">
+            <div className="text-nano text-emerald-400/70 mt-1">
               This notification will self-destruct in 3s...
             </div>
           </div>
@@ -1559,7 +1560,7 @@ export default function RoomPage() {
             >
               <Clock className="w-4 h-4 animate-spin text-classified-crimson" />
               <div>
-                <span className="text-[10px] text-gray-500 uppercase tracking-wider block">
+                <span className="text-nano text-gray-500 uppercase tracking-wider block">
                   {room.phase === "VERDICT" ? "VERDICT DELIBERATION:" : "MISSION TIME REMAINING:"}
                 </span>
                 <span id="timer-countdown" className="text-sm font-bold tracking-widest text-white">
@@ -1581,7 +1582,7 @@ export default function RoomPage() {
           <button
             id="field-manual-btn"
             onClick={handleOpenManual}
-            className="px-3 py-1.5 bg-carbon-850 hover:bg-carbon-800 border border-classified-amber/60 text-classified-amber rounded text-xs font-mono font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
+            className="min-h-[44px] px-3.5 py-2 bg-carbon-850 hover:bg-carbon-800 border border-classified-amber/60 text-classified-amber rounded text-xs font-mono font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
           >
             <BookOpen className="w-3.5 h-3.5" />
             FIELD MANUAL
@@ -1591,11 +1592,27 @@ export default function RoomPage() {
             <button
               id="enable-notifications-btn"
               onClick={handleRequestNotifPermission}
-              className="px-3 py-1.5 bg-carbon-850 hover:bg-carbon-800 border border-classified-amber text-classified-amber rounded text-xs font-mono font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer animate-pulse"
+              className="min-h-[44px] px-3.5 py-2 bg-carbon-850 hover:bg-carbon-800 border border-classified-amber text-classified-amber rounded text-xs font-mono font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer animate-pulse"
               title="Enable transmission notifications when tab or app is in background"
             >
               <Bell className="w-3.5 h-3.5" />
               <span>ENABLE COMMS ALERTS</span>
+            </button>
+          )}
+
+          {room.phase !== "LOBBY" && (
+            <button
+              id="toggle-stream-safe-btn"
+              onClick={() => setIsStreamSafe(!isStreamSafe)}
+              className={`min-h-[44px] px-3.5 py-2 bg-carbon-850 hover:bg-carbon-800 border rounded text-xs font-mono font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer ${
+                isStreamSafe
+                  ? "border-classified-crimson text-classified-crimson bg-red-950/40"
+                  : "border-carbon-700 text-muted hover:text-white"
+              }`}
+              title="Toggle Stream-Safe Redaction mode to prevent leaking secret candidate deductions while streaming"
+            >
+              <ShieldAlert className="w-3.5 h-3.5" />
+              <span>{isStreamSafe ? "STREAM SAFE: ON" : "STREAM SAFE: OFF"}</span>
             </button>
           )}
 
@@ -1614,7 +1631,7 @@ export default function RoomPage() {
                   // ignore
                 }
               }}
-              className="px-3 py-1.5 bg-carbon-850 hover:bg-carbon-800 border border-classified-terminal/60 text-classified-terminal rounded text-xs font-mono font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
+              className="min-h-[44px] px-3.5 py-2 bg-carbon-850 hover:bg-carbon-800 border border-classified-terminal/60 text-classified-terminal rounded text-xs font-mono font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
             >
               {copiedPersonalLink ? (
                 <>
@@ -1644,7 +1661,7 @@ export default function RoomPage() {
               DECLASSIFIED INTEL
             </div>
             <div>
-              <div className="text-[11px] uppercase tracking-widest font-bold text-classified-amber/80">
+              <div className="text-micro uppercase tracking-widest font-bold text-classified-amber/80">
                 AUTOMATED INTELLIGENCE INTERCEPT // 50% TIMELINE REACHED
               </div>
               <div className="text-lg font-extrabold tracking-wider text-white">
@@ -1660,7 +1677,7 @@ export default function RoomPage() {
           </div>
           <div className="text-left sm:text-right text-xs text-classified-amber/70 font-mono shrink-0">
             <div className="font-bold text-white uppercase tracking-wider">CROSS-REFERENCE CODE WORDS</div>
-            <div className="text-[10px] text-gray-400">UNMATCHED WORDS MAY INDICATE MOLE DECEPTION</div>
+            <div className="text-nano text-gray-400">UNMATCHED WORDS MAY INDICATE MOLE DECEPTION</div>
           </div>
         </div>
       )}
@@ -1696,7 +1713,7 @@ export default function RoomPage() {
                   Secure Uplink Link // Dispatch Operatives
                 </h3>
               </div>
-              <p className="text-[11px] text-gray-400">
+              <p className="text-micro text-gray-400">
                 Share this direct room link or the Operation Code so other players can join this match.
               </p>
             </div>
@@ -1722,7 +1739,7 @@ export default function RoomPage() {
                     // ignore
                   }
                 }}
-                className="px-3.5 py-2 bg-classified-amber/15 hover:bg-classified-amber/25 border border-classified-amber text-classified-amber rounded text-xs font-mono font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
+                className="min-h-[44px] px-3.5 py-2 bg-classified-amber/15 hover:bg-classified-amber/25 border border-classified-amber text-classified-amber rounded text-xs font-mono font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
               >
                 {copiedLink ? (
                   <>
@@ -1824,12 +1841,12 @@ export default function RoomPage() {
                       {player.displayName}
                     </span>
                     {player.id === self.id && (
-                      <span className="text-[10px] bg-carbon-800 text-classified-amber px-2 py-0.5 rounded border border-carbon-700">
+                      <span className="text-nano bg-carbon-800 text-classified-amber px-2 py-0.5 rounded border border-carbon-700">
                         YOU
                       </span>
                     )}
                     {player.isHost && (
-                      <span className="text-[10px] bg-carbon-800 text-gray-400 px-2 py-0.5 rounded border border-carbon-700">
+                      <span className="text-nano bg-carbon-800 text-gray-400 px-2 py-0.5 rounded border border-carbon-700">
                         COMMANDER
                       </span>
                     )}
@@ -1851,7 +1868,7 @@ export default function RoomPage() {
                         id={`kick-player-${player.id}`}
                         onClick={() => handleKickPlayer(player.id)}
                         title={`Dismiss ${player.displayName}`}
-                        className="ml-2 px-2 py-1 bg-red-950/60 hover:bg-red-900 border border-classified-crimson/50 text-classified-crimson hover:text-white rounded text-[10px] font-mono uppercase tracking-wider transition-colors cursor-pointer"
+                        className="ml-2 min-h-[44px] px-3 py-2 bg-red-950/60 hover:bg-red-900 border border-classified-crimson/50 text-classified-crimson hover:text-white rounded text-nano font-mono uppercase tracking-wider transition-colors cursor-pointer flex items-center justify-center"
                       >
                         DISMISS
                       </button>
@@ -1888,14 +1905,14 @@ export default function RoomPage() {
                 <button
                   id="leave-operation-btn"
                   onClick={handleLeaveOperation}
-                  className="min-h-[44px] py-2 text-[11px] text-classified-crimson hover:text-red-400 uppercase tracking-wider font-mono transition-colors cursor-pointer"
+                  className="min-h-[44px] py-2 text-micro text-classified-crimson hover:text-red-400 uppercase tracking-wider font-mono transition-colors cursor-pointer"
                 >
                   Leave Operation / Vacate Roster Spot
                 </button>
                 <button
                   id="disconnect-station-btn"
                   onClick={handleDisconnectStation}
-                  className="min-h-[44px] py-2 text-[11px] text-gray-500 hover:text-gray-400 uppercase tracking-wider font-mono transition-colors cursor-pointer"
+                  className="min-h-[44px] py-2 text-micro text-gray-500 hover:text-gray-400 uppercase tracking-wider font-mono transition-colors cursor-pointer"
                 >
                   Disconnect Station (Keep Roster Spot)
                 </button>
@@ -1968,7 +1985,7 @@ export default function RoomPage() {
                   }`}
                 />
                 <div>
-                  <span className="text-[10px] uppercase tracking-widest text-gray-400 block">
+                  <span className="text-nano uppercase tracking-widest text-gray-400 block">
                     CLASSIFIED MISSION DEBRIEF // ALL OBJECTIVES TERMINATED
                   </span>
                   <h1 className="text-2xl sm:text-3xl font-black uppercase tracking-wider">
@@ -2044,7 +2061,7 @@ export default function RoomPage() {
                     </div>
                   )}
                   {allVerdicts?.RED?.moleIndictmentName && (
-                    <div className="flex justify-between text-[11px] text-gray-400">
+                    <div className="flex justify-between text-micro text-gray-400">
                       <span>Indicted Operative:</span>
                       <span className="text-red-300">{allVerdicts.RED.moleIndictmentName}</span>
                     </div>
@@ -2087,7 +2104,7 @@ export default function RoomPage() {
                     </div>
                   )}
                   {allVerdicts?.BLUE?.moleIndictmentName && (
-                    <div className="flex justify-between text-[11px] text-gray-400">
+                    <div className="flex justify-between text-micro text-gray-400">
                       <span>Indicted Operative:</span>
                       <span className="text-blue-300">{allVerdicts.BLUE.moleIndictmentName}</span>
                     </div>
@@ -2142,7 +2159,7 @@ export default function RoomPage() {
                           <div className="font-bold text-white flex items-center gap-1.5">
                             {p.displayName}
                             {p.id === self.id && (
-                              <span className="text-[9px] bg-carbon-800 text-classified-amber px-1.5 py-0.2 rounded border border-carbon-700">
+                              <span className="text-nano bg-carbon-800 text-classified-amber px-1.5 py-0.2 rounded border border-carbon-700">
                                 YOU
                               </span>
                             )}
@@ -2151,7 +2168,7 @@ export default function RoomPage() {
                         <td className="py-3 px-3">
                           <div className="flex items-center gap-1.5">
                             <span
-                              className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                              className={`px-1.5 py-0.5 rounded text-nano font-bold ${
                                 p.apparentTeam === "RED"
                                   ? "bg-red-950/80 text-red-400 border border-red-800"
                                   : "bg-blue-950/80 text-blue-400 border border-blue-800"
@@ -2161,7 +2178,7 @@ export default function RoomPage() {
                             </span>
                             {p.role === "MOLE" && (
                               <span
-                                className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                className={`px-1.5 py-0.5 rounded text-nano font-bold ${
                                   p.actualTeam === "RED"
                                     ? "bg-red-900 text-red-200"
                                     : "bg-blue-900 text-blue-200"
@@ -2237,7 +2254,7 @@ export default function RoomPage() {
                       <div className="mb-2">
                         <span
                           id={`mole-reveal-${p.id}`}
-                          className="classified-stamp text-[10px] text-classified-crimson border-classified-crimson bg-red-950/70 block text-center"
+                          className="classified-stamp text-nano text-classified-crimson border-classified-crimson bg-red-950/70 block text-center"
                         >
                           TRAITOR UNMASKED // ENEMY MOLE
                         </span>
@@ -2248,13 +2265,13 @@ export default function RoomPage() {
                       <span className="font-bold text-white text-sm flex items-center gap-1.5">
                         {p.displayName}
                         {isSelf && (
-                          <span className="text-[9px] bg-carbon-800 text-classified-amber px-1.5 py-0.2 rounded border border-carbon-700">
+                          <span className="text-nano bg-carbon-800 text-classified-amber px-1.5 py-0.2 rounded border border-carbon-700">
                             YOU
                           </span>
                         )}
                       </span>
                       <span
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${
+                        className={`text-nano font-bold px-2 py-0.5 rounded uppercase ${
                           p.role === "SPYMASTER"
                             ? "bg-amber-950 text-amber-400 border border-amber-800"
                             : p.role === "MOLE"
@@ -2289,7 +2306,7 @@ export default function RoomPage() {
 
                     {/* Individual Outcome: Moles win if and only if their ACTUAL team wins */}
                     <div className="border-t border-carbon-800/80 pt-2 flex items-center justify-between text-xs">
-                      <span className="text-gray-500 uppercase text-[10px]">Operative Result:</span>
+                      <span className="text-gray-500 uppercase text-nano">Operative Result:</span>
                       {draw ? (
                         <span className="font-bold text-classified-amber">STALEMATE (DRAW)</span>
                       ) : won ? (
@@ -2347,8 +2364,33 @@ export default function RoomPage() {
       ) : (
         /* PHASE 2: INFILTRATION VIEW (CLASSIFIED DOSSIER + INTELLIGENCE COMMS) */
         <div className="space-y-6">
+          {/* Mobile Quick-Jump Anchor Bar */}
+          <div className="flex md:hidden items-center justify-between gap-1 p-1 bg-carbon-900 border border-carbon-800 rounded font-mono text-micro uppercase tracking-wider sticky top-16 z-20 shadow-md backdrop-blur">
+            <button
+              type="button"
+              onClick={() => document.getElementById("top-secret-dossier")?.scrollIntoView({ behavior: "smooth" })}
+              className="flex-1 py-2 px-1 text-center bg-carbon-850 hover:bg-carbon-800 text-gray-300 hover:text-white rounded border border-carbon-700/60 min-h-[44px] flex items-center justify-center cursor-pointer"
+            >
+              [DOSSIER]
+            </button>
+            <button
+              type="button"
+              onClick={() => document.getElementById("comms-panel")?.scrollIntoView({ behavior: "smooth" })}
+              className="flex-1 py-2 px-1 text-center bg-carbon-850 hover:bg-carbon-800 text-classified-amber rounded border border-classified-amber/40 min-h-[44px] flex items-center justify-center cursor-pointer font-bold"
+            >
+              [COMMS]
+            </button>
+            <button
+              type="button"
+              onClick={() => document.getElementById("roster-panel")?.scrollIntoView({ behavior: "smooth" })}
+              className="flex-1 py-2 px-1 text-center bg-carbon-850 hover:bg-carbon-800 text-gray-300 hover:text-white rounded border border-carbon-700/60 min-h-[44px] flex items-center justify-center cursor-pointer"
+            >
+              [ROSTER]
+            </button>
+          </div>
+
           {/* Top Secret Operative Dossier Card */}
-          <div id="top-secret-dossier" className="bg-carbon-900 border border-carbon-700 rounded-lg p-6 shadow-2xl relative overflow-hidden">
+          <div id="top-secret-dossier" className="bg-carbon-900 border border-carbon-700 rounded-lg p-6 shadow-2xl relative overflow-hidden scroll-mt-24">
             <div className="absolute top-0 right-0 transform translate-x-4 -translate-y-2">
               <span className="classified-stamp text-xs text-classified-crimson border-classified-crimson opacity-80">
                 TOP SECRET // EYES ONLY
@@ -2392,7 +2434,7 @@ export default function RoomPage() {
                         }`}
                       >
                         <span>LOYAL TO {self.actualTeam} TEAM</span>
-                        <span className="text-[9px] bg-red-950 text-red-400 border border-red-800 px-1 py-0.5 rounded font-bold animate-pulse">
+                        <span className="text-nano bg-red-950 text-red-400 border border-red-800 px-1 py-0.5 rounded font-bold animate-pulse">
                           SLEEPER
                         </span>
                       </div>
@@ -2477,7 +2519,7 @@ export default function RoomPage() {
                     <span className="text-xs text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
                       <Lock className="w-3.5 h-3.5 text-classified-amber" /> Secret Code Word
                     </span>
-                    <span className="text-[10px] text-gray-500 uppercase">
+                    <span className="text-nano text-gray-500 uppercase">
                       {isDecrypted ? "DECRYPTED" : "REDACTED"}
                     </span>
                   </div>
@@ -2488,7 +2530,7 @@ export default function RoomPage() {
                         id="self-assigned-word"
                         className="text-xl font-bold font-mono tracking-widest text-classified-amber bg-amber-950/30 px-3 py-1 rounded border border-amber-700/50 inline-block uppercase"
                       >
-                        {self.assignedWord}
+                        {isStreamSafe ? "•••••••• (STREAM-SAFE)" : self.assignedWord}
                       </span>
                     ) : (
                       <span
@@ -2503,6 +2545,21 @@ export default function RoomPage() {
 
                 <button
                   id="decrypt-word-btn"
+                  tabIndex={0}
+                  role="button"
+                  aria-label="Hold Space, Enter, or pointer to decrypt secret code word"
+                  onKeyDown={(e) => {
+                    if (e.key === " " || e.key === "Enter") {
+                      e.preventDefault();
+                      if (!isDecrypted) handleDecryptStart();
+                    }
+                  }}
+                  onKeyUp={(e) => {
+                    if (e.key === " " || e.key === "Enter") {
+                      e.preventDefault();
+                      handleDecryptEnd();
+                    }
+                  }}
                   onPointerDown={(e) => {
                     e.preventDefault();
                     handleDecryptStart();
@@ -2537,7 +2594,9 @@ export default function RoomPage() {
                     userSelect: "none",
                     touchAction: "manipulation",
                   }}
-                  className="w-full min-h-[44px] py-2.5 px-3 bg-carbon-800 hover:bg-carbon-700 active:bg-classified-amber active:text-black border border-carbon-600 rounded text-xs font-mono font-bold uppercase tracking-wider text-gray-300 flex items-center justify-center gap-2 transition-colors select-none cursor-pointer"
+                  className={`w-full min-h-[44px] py-2.5 px-3 bg-carbon-800 hover:bg-carbon-700 active:bg-classified-amber active:text-black border border-carbon-600 rounded text-xs font-mono font-bold uppercase tracking-wider text-gray-300 flex items-center justify-center gap-2 transition-colors select-none cursor-pointer ${
+                    isDecrypted ? "hold-progress-active" : ""
+                  }`}
                 >
                   {isDecrypted ? (
                     <>
@@ -2629,7 +2688,7 @@ export default function RoomPage() {
                       <div className="flex gap-2">
                         <input
                           id="spymaster-word-input"
-                          type="text"
+                          type={isStreamSafe ? "password" : "text"}
                           value={spymasterWordInput}
                           onChange={(e) => setSpymasterWordInput(e.target.value)}
                           onKeyDown={(e) => e.key === "Enter" && handleAddSpymasterGuess()}
@@ -2654,9 +2713,9 @@ export default function RoomPage() {
                             <span
                               key={w}
                               id={`draft-guess-${w.toLowerCase()}`}
-                              className="bg-carbon-800 border border-classified-amber/60 text-classified-amber text-xs px-2.5 py-1.5 rounded flex items-center gap-1.5 font-bold uppercase shadow"
+                              className="bg-carbon-800 border border-classified-amber/60 text-classified-amber text-xs px-2.5 py-1.5 rounded flex items-center gap-1.5 font-bold uppercase shadow min-h-[44px]"
                             >
-                              <span>{w}</span>
+                              <span>{isStreamSafe ? "••••••••" : w}</span>
                               <button
                                 onClick={() => handleRemoveSpymasterGuess(w)}
                                 className="text-gray-400 hover:text-red-400 font-bold ml-1 cursor-pointer p-1 -m-1"
@@ -2678,7 +2737,7 @@ export default function RoomPage() {
                             id="mole-indictment-select"
                             value={moleIndictmentId}
                             onChange={(e) => setMoleIndictmentId(e.target.value)}
-                            className="bg-carbon-900 border border-carbon-700 text-xs text-classified-amber rounded px-2 py-1.5 font-mono uppercase min-h-[36px]"
+                            className="bg-carbon-900 border border-carbon-700 text-xs text-classified-amber rounded px-3 py-2 font-mono uppercase min-h-[44px]"
                           >
                             <option value="">-- No Indictment --</option>
                             {players
@@ -2726,7 +2785,7 @@ export default function RoomPage() {
                       <span className="text-xs font-bold uppercase tracking-wider text-gray-300">
                         COLLABORATIVE TEAM PROPOSALS
                       </span>
-                      <span className="text-[11px] text-gray-500">
+                      <span className="text-micro text-gray-500">
                         {gameState?.teamSuggestions?.length || 0} WORDS ON BOARD
                       </span>
                     </div>
@@ -2734,7 +2793,7 @@ export default function RoomPage() {
                     <div className="flex gap-2">
                       <input
                         id="proposal-word-input"
-                        type="text"
+                        type={isStreamSafe ? "password" : "text"}
                         value={proposalInput}
                         onChange={(e) => setProposalInput(e.target.value)}
                         onKeyDown={(e) => e.key === "Enter" && handleProposeWord()}
@@ -2764,13 +2823,13 @@ export default function RoomPage() {
                             <div
                               key={s.id}
                               id={`suggestion-item-${s.word.toLowerCase()}`}
-                              className="p-2.5 bg-carbon-900 border border-carbon-800 rounded flex items-center justify-between gap-3 text-xs"
+                              className="p-2.5 bg-carbon-900 border border-carbon-800 rounded flex items-center justify-between gap-3 text-xs min-h-[48px]"
                             >
                               <div className="flex items-center gap-3">
                                 <span className="font-bold text-white text-sm tracking-wider uppercase">
-                                  {s.word}
+                                  {isStreamSafe ? "••••••••" : s.word}
                                 </span>
-                                <span className="text-[10px] text-gray-500">
+                                <span className="text-nano text-gray-500">
                                   suggested by {s.suggestedBy}
                                 </span>
                               </div>
@@ -2779,7 +2838,7 @@ export default function RoomPage() {
                                 <button
                                   id={`upvote-btn-${s.id}`}
                                   onClick={() => handleVoteSuggestion(s.id)}
-                                  className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-bold uppercase transition-colors ${
+                                  className={`flex items-center justify-center gap-1 min-h-[44px] px-3 py-2 rounded text-xs font-bold uppercase transition-colors cursor-pointer ${
                                     hasVoted
                                       ? "bg-classified-amber text-black"
                                       : "bg-carbon-800 text-gray-300 hover:text-white border border-carbon-700"
@@ -2792,7 +2851,7 @@ export default function RoomPage() {
                                   <button
                                     id={`adopt-word-btn-${s.id}`}
                                     onClick={() => handleAddSpymasterGuess(s.word)}
-                                    className="bg-carbon-800 hover:bg-carbon-700 text-classified-amber border border-classified-amber/30 px-2 py-1 rounded text-[11px] uppercase font-bold"
+                                    className="bg-carbon-800 hover:bg-carbon-700 text-classified-amber border border-classified-amber/30 px-3 py-2 rounded text-micro uppercase font-bold min-h-[44px] flex items-center justify-center cursor-pointer"
                                   >
                                     + ADOPT
                                   </button>
@@ -2814,7 +2873,7 @@ export default function RoomPage() {
             {/* Communication Panel (2 Columns) */}
             <div
               id="comms-panel"
-              className="lg:col-span-2 bg-carbon-900 border border-carbon-800 rounded-lg flex flex-col h-[460px] sm:h-[500px] lg:h-[540px] overflow-hidden scroll-mt-24"
+              className="lg:col-span-2 bg-carbon-900 border-2 border-carbon-800 rounded-lg flex flex-col h-[480px] sm:h-[520px] lg:h-[560px] overflow-hidden scroll-mt-24 shadow-2xl"
             >
               {/* Incoming Clearance Challenge Modal/Banner */}
               {gameState?.incomingChallenges && gameState.incomingChallenges.length > 0 && (
@@ -2842,7 +2901,7 @@ export default function RoomPage() {
                       onClick={() =>
                         handleRespondChallenge(gameState.incomingChallenges![0].id, "ACCEPT")
                       }
-                      className="bg-emerald-800 hover:bg-emerald-700 text-emerald-100 font-bold px-3 py-1.5 rounded text-[11px] uppercase tracking-wider transition-colors border border-emerald-500 shadow min-h-[36px] active:scale-95 cursor-pointer"
+                      className="bg-emerald-800 hover:bg-emerald-700 text-emerald-100 font-bold px-3.5 py-2 rounded text-micro uppercase tracking-wider transition-colors border border-emerald-500 shadow min-h-[44px] flex items-center justify-center active:scale-95 cursor-pointer"
                     >
                       {challengeActionLoading ? "TRANSMITTING..." : "SUBMIT COUNTER-SIGNATURE"}
                     </button>
@@ -2852,7 +2911,7 @@ export default function RoomPage() {
                       onClick={() =>
                         handleRespondChallenge(gameState.incomingChallenges![0].id, "DENY")
                       }
-                      className="bg-carbon-800 hover:bg-carbon-700 text-gray-300 font-bold px-2 py-1.5 rounded text-[11px] uppercase tracking-wider transition-colors border border-carbon-600 min-h-[36px] active:scale-95 cursor-pointer"
+                      className="bg-carbon-800 hover:bg-carbon-700 text-gray-300 font-bold px-3.5 py-2 rounded text-micro uppercase tracking-wider transition-colors border border-carbon-600 min-h-[44px] flex items-center justify-center active:scale-95 cursor-pointer"
                     >
                       DECLINE
                     </button>
@@ -2861,20 +2920,20 @@ export default function RoomPage() {
               )}
 
               {/* Channel Tabs */}
-              <div className="flex border-b border-carbon-800 bg-carbon-950/60 p-1.5 gap-1.5 font-mono text-xs">
+              <div className="flex border-b border-carbon-800 bg-carbon-950/60 p-2 gap-2 font-mono text-xs">
                 <button
                   id="tab-public"
                   onClick={() => {
                     setActiveTab("PUBLIC");
                     setLastReadTimestamps((prev) => ({ ...prev, PUBLIC: Date.now() }));
                   }}
-                  className={`flex-1 py-2 px-3 rounded font-bold uppercase tracking-wider transition-colors flex items-center justify-center gap-1.5 min-h-[40px] cursor-pointer ${
+                  className={`flex-1 py-2 px-3 rounded font-bold uppercase tracking-wider transition-colors flex items-center justify-center gap-1.5 min-h-[44px] cursor-pointer ${
                     activeTab === "PUBLIC"
                       ? "bg-carbon-800 text-white border border-carbon-700 shadow"
                       : "text-gray-400 hover:text-white"
                   }`}
                 >
-                  <Radio className="w-3.5 h-3.5 text-gray-400" /> Public Wire
+                  <Radio className="w-3.5 h-3.5 text-gray-400" /> [FREQ 01 // PUBLIC WIRE]
                   {messages.some(
                     (m) =>
                       m.channelType === "PUBLIC" &&
@@ -2895,7 +2954,7 @@ export default function RoomPage() {
                     setActiveTab("TEAM");
                     setLastReadTimestamps((prev) => ({ ...prev, TEAM: Date.now() }));
                   }}
-                  className={`flex-1 py-2 px-3 rounded font-bold uppercase tracking-wider transition-colors flex items-center justify-center gap-1.5 min-h-[40px] cursor-pointer ${
+                  className={`flex-1 py-2 px-3 rounded font-bold uppercase tracking-wider transition-colors flex items-center justify-center gap-1.5 min-h-[44px] cursor-pointer ${
                     activeTab === "TEAM"
                       ? self.apparentTeam === "RED"
                         ? "bg-red-950/80 text-red-300 border border-red-800 shadow"
@@ -2903,7 +2962,7 @@ export default function RoomPage() {
                       : "text-gray-400 hover:text-white"
                   }`}
                 >
-                  <Flag className="w-3.5 h-3.5" /> {self.apparentTeam} Radio
+                  <Flag className="w-3.5 h-3.5" /> [FREQ 02 // {self.apparentTeam} RADIO]
                   {messages.some(
                     (m) =>
                       m.channelType.startsWith("TEAM") &&
@@ -2924,13 +2983,13 @@ export default function RoomPage() {
                     setActiveTab("DM");
                     setLastReadTimestamps((prev) => ({ ...prev, DM: Date.now() }));
                   }}
-                  className={`flex-1 py-2 px-3 rounded font-bold uppercase tracking-wider transition-colors flex items-center justify-center gap-1.5 min-h-[40px] cursor-pointer ${
+                  className={`flex-1 py-2 px-3 rounded font-bold uppercase tracking-wider transition-colors flex items-center justify-center gap-1.5 min-h-[44px] cursor-pointer ${
                     activeTab === "DM"
                       ? "bg-classified-amber/20 text-classified-amber border border-classified-amber/50 shadow"
                       : "text-gray-400 hover:text-white"
                   }`}
                 >
-                  <MessageSquare className="w-3.5 h-3.5" /> Direct Line
+                  <MessageSquare className="w-3.5 h-3.5" /> [FREQ 03 // DIRECT LINE]
                   {messages.some(
                     (m) =>
                       m.channelType === "DM" &&
@@ -2950,7 +3009,7 @@ export default function RoomPage() {
 
               {/* Channel Sub-Header for DM View */}
               {activeTab === "DM" && (
-                <div className="border-b border-carbon-800 px-4 py-2 bg-carbon-950/40 flex flex-wrap items-center justify-between gap-2 font-mono text-xs">
+                <div className="border-b border-carbon-800 px-4 py-2.5 bg-carbon-950/40 flex flex-wrap items-center justify-between gap-2 font-mono text-xs">
                   <div className="flex items-center gap-2">
                     <span className="text-gray-500 uppercase">Target Operative:</span>
                     <select
@@ -2960,7 +3019,7 @@ export default function RoomPage() {
                         setSelectedPeerId(e.target.value);
                         setLastReadTimestamps((prev) => ({ ...prev, DM: Date.now() }));
                       }}
-                      className="bg-carbon-900 border border-carbon-700 text-classified-amber text-xs rounded px-2.5 py-1.5 focus:outline-none focus:border-classified-amber uppercase font-bold min-h-[36px]"
+                      className="bg-carbon-900 border border-carbon-700 text-classified-amber text-xs rounded px-3 py-2 focus:outline-none focus:border-classified-amber uppercase font-bold min-h-[44px]"
                     >
                       {peerPlayers.map((peer) => (
                         <option key={peer.id} value={peer.id}>
@@ -2975,7 +3034,7 @@ export default function RoomPage() {
                       gameState?.verifiedAssets?.includes(selectedPeerId) ? (
                         <span
                           id="confirmed-asset-badge"
-                          className="flex items-center gap-1 text-[11px] bg-emerald-950 border border-emerald-500 text-emerald-300 px-2.5 py-1.5 rounded font-bold tracking-wider uppercase"
+                          className="flex items-center gap-1 text-micro bg-emerald-950 border border-emerald-500 text-emerald-300 px-3 py-2 rounded font-bold tracking-wider uppercase min-h-[44px]"
                         >
                           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
                           CONFIRMED ASSET
@@ -2983,7 +3042,7 @@ export default function RoomPage() {
                       ) : gameState?.challengeStatuses?.[selectedPeerId] === "PENDING" ? (
                         <span
                           id="challenge-pending-badge"
-                          className="text-[11px] bg-amber-950 border border-amber-500/50 text-amber-300 px-2.5 py-1.5 rounded uppercase tracking-wider font-mono animate-pulse"
+                          className="text-micro bg-amber-950 border border-amber-500/50 text-amber-300 px-3 py-2 rounded uppercase tracking-wider font-mono animate-pulse min-h-[44px] flex items-center"
                         >
                           AWAITING RESPONSE...
                         </span>
@@ -2992,7 +3051,7 @@ export default function RoomPage() {
                           id="verify-credentials-btn"
                           onClick={handleInitiateChallenge}
                           disabled={isChallenging || !selectedPeerId}
-                          className="flex items-center gap-1 text-[11px] bg-carbon-900 hover:bg-carbon-800 text-classified-amber border border-classified-amber/50 px-2.5 py-1.5 rounded font-bold tracking-wider uppercase transition-colors min-h-[36px] active:scale-95 cursor-pointer"
+                          className="flex items-center justify-center gap-1 text-micro bg-carbon-900 hover:bg-carbon-800 text-classified-amber border border-classified-amber/50 px-3.5 py-2 rounded font-bold tracking-wider uppercase transition-colors min-h-[44px] active:scale-95 cursor-pointer"
                         >
                           <ShieldAlert className="w-3.5 h-3.5 text-classified-amber" />
                           {isChallenging ? "CHALLENGING..." : "VERIFY OPERATIVE CREDENTIALS"}
@@ -3004,7 +3063,7 @@ export default function RoomPage() {
                       id="burn-dm-btn"
                       onClick={handleBurnConversation}
                       disabled={isBurning || !selectedPeerId}
-                      className="flex items-center gap-1 text-[11px] bg-red-950 hover:bg-red-900 text-red-300 border border-red-800 px-2.5 py-1.5 rounded font-bold tracking-wider uppercase transition-colors min-h-[36px] active:scale-95 cursor-pointer"
+                      className="flex items-center justify-center gap-1 text-micro bg-red-950 hover:bg-red-900 text-red-300 border border-red-800 px-3.5 py-2 rounded font-bold tracking-wider uppercase transition-colors min-h-[44px] active:scale-95 cursor-pointer"
                     >
                       <Flame className="w-3.5 h-3.5 text-red-400" />
                       {isBurning ? "BURNING..." : "BURN CONVERSATION"}
@@ -3025,7 +3084,7 @@ export default function RoomPage() {
                       <strong>CONFIRMED ASSET:</strong> {activePeer?.displayName} is cryptographically verified as an embedded Mole loyal to your command.
                     </span>
                   </div>
-                  <span className="text-[10px] text-emerald-400/60 uppercase tracking-widest font-bold">SECURE ASSET</span>
+                  <span className="text-nano text-emerald-400/60 uppercase tracking-widest font-bold">SECURE ASSET</span>
                 </div>
               )}
 
@@ -3080,7 +3139,7 @@ export default function RoomPage() {
               {/* Burn Notice Alert */}
               {burnNotice && (
                 <div className="bg-classified-crimson/20 border-b border-classified-crimson/40 px-4 py-1.5 text-xs font-mono text-red-300 flex items-center gap-2">
-                  <Flame className="w-3.5 h-3.5 text-red-400 animate-bounce" />
+                  <Flame className="w-3.5 h-3.5 text-classified-crimson animate-pulse" />
                   <span>{burnNotice}</span>
                 </div>
               )}
@@ -3093,7 +3152,7 @@ export default function RoomPage() {
                 {currentTabMessages.length === 0 ? (
                   <div className="h-full flex flex-col items-center justify-center text-gray-600">
                     <Terminal className="w-8 h-8 mb-2 opacity-40" />
-                    <p className="uppercase tracking-wider text-[11px]">
+                    <p className="uppercase tracking-wider text-micro">
                       {activeTab === "DM"
                         ? "NO RECORDED TRANSMISSIONS ON THIS FREQUENCY"
                         : "SECURE CHANNEL QUIET // NO TRANSMISSIONS"}
@@ -3114,7 +3173,7 @@ export default function RoomPage() {
                             : "bg-blue-950/20 border-blue-900/40 mr-8"
                         }`}
                       >
-                        <div className="flex items-center justify-between text-[10px] text-gray-500 mb-1">
+                        <div className="flex items-center justify-between text-nano text-gray-500 mb-1">
                           <span className="font-bold flex items-center gap-1.5">
                             <span
                               className={
@@ -3177,14 +3236,14 @@ export default function RoomPage() {
             </div>
 
             {/* Split Rosters (1 Column) */}
-            <div className="space-y-4">
+            <div id="roster-panel" className="space-y-4 scroll-mt-24">
               {/* Red Team Roster */}
               <div className="bg-carbon-900 border border-red-900/60 rounded-lg p-4">
                 <div className="flex items-center justify-between mb-3 border-b border-red-900/40 pb-2">
                   <span className="text-xs font-mono font-bold uppercase text-red-400 tracking-wider flex items-center gap-1.5">
                     <Flag className="w-3.5 h-3.5 text-red-500" /> Red Team ({redApparentPlayers.length})
                   </span>
-                  <span className="text-[9px] font-mono text-red-500/80 uppercase">APPARENT</span>
+                  <span className="text-nano font-mono text-red-500/80 uppercase">APPARENT</span>
                 </div>
                 <div className="space-y-2" id="red-team-roster">
                   {redApparentPlayers.map((player) => {
@@ -3212,17 +3271,17 @@ export default function RoomPage() {
                             {player.displayName}
                           </span>
                           {isSelf ? (
-                            <span className="text-[9px] bg-red-900/80 text-red-200 px-1.5 py-0.5 rounded shrink-0">
+                            <span className="text-nano bg-red-900/80 text-red-200 px-1.5 py-0.5 rounded shrink-0">
                               YOU
                             </span>
                           ) : (
-                            <span className="text-[9px] text-gray-400 group-hover:text-classified-amber flex items-center gap-1 opacity-75 group-hover:opacity-100 transition-opacity shrink-0">
+                            <span className="text-nano text-gray-400 group-hover:text-classified-amber flex items-center gap-1 opacity-75 group-hover:opacity-100 transition-opacity shrink-0">
                               <MessageSquare className="w-3 h-3 text-classified-amber" />
                               <span className="hidden sm:inline">DIRECT LINE →</span>
                             </span>
                           )}
                         </div>
-                        <span className="text-[9px] text-gray-500 uppercase shrink-0">ACTIVE</span>
+                        <span className="text-nano text-gray-500 uppercase shrink-0">ACTIVE</span>
                       </div>
                     );
                   })}
@@ -3235,7 +3294,7 @@ export default function RoomPage() {
                   <span className="text-xs font-mono font-bold uppercase text-blue-400 tracking-wider flex items-center gap-1.5">
                     <Flag className="w-3.5 h-3.5 text-blue-500" /> Blue Team ({blueApparentPlayers.length})
                   </span>
-                  <span className="text-[9px] font-mono text-blue-500/80 uppercase">APPARENT</span>
+                  <span className="text-nano font-mono text-blue-500/80 uppercase">APPARENT</span>
                 </div>
                 <div className="space-y-2" id="blue-team-roster">
                   {blueApparentPlayers.map((player) => {
@@ -3263,17 +3322,17 @@ export default function RoomPage() {
                             {player.displayName}
                           </span>
                           {isSelf ? (
-                            <span className="text-[9px] bg-blue-900/80 text-blue-200 px-1.5 py-0.5 rounded shrink-0">
+                            <span className="text-nano bg-blue-900/80 text-blue-200 px-1.5 py-0.5 rounded shrink-0">
                               YOU
                             </span>
                           ) : (
-                            <span className="text-[9px] text-gray-400 group-hover:text-classified-amber flex items-center gap-1 opacity-75 group-hover:opacity-100 transition-opacity shrink-0">
+                            <span className="text-nano text-gray-400 group-hover:text-classified-amber flex items-center gap-1 opacity-75 group-hover:opacity-100 transition-opacity shrink-0">
                               <MessageSquare className="w-3 h-3 text-classified-amber" />
                               <span className="hidden sm:inline">DIRECT LINE →</span>
                             </span>
                           )}
                         </div>
-                        <span className="text-[9px] text-gray-500 uppercase shrink-0">ACTIVE</span>
+                        <span className="text-nano text-gray-500 uppercase shrink-0">ACTIVE</span>
                       </div>
                     );
                   })}
@@ -3303,11 +3362,11 @@ export default function RoomPage() {
                     <h3 className="text-sm sm:text-base font-bold text-white uppercase tracking-wider">
                       Operational Field Manual
                     </h3>
-                    <span className="classified-stamp text-[9px] text-classified-amber border-classified-amber py-0.2 px-1">
+                    <span className="classified-stamp text-nano text-classified-amber border-classified-amber py-0.2 px-1">
                       TOP SECRET
                     </span>
                   </div>
-                  <p className="text-[10px] sm:text-[11px] text-gray-500">
+                  <p className="text-nano sm:text-micro text-gray-500">
                     DIRECTORATE OF ESPIONAGE OPERATIONS // STANDARD OPERATING DIRECTIVES
                   </p>
                 </div>
@@ -3315,7 +3374,7 @@ export default function RoomPage() {
               <button
                 id="close-field-manual-btn"
                 onClick={() => setIsManualOpen(false)}
-                className="p-1.5 text-gray-400 hover:text-white hover:bg-carbon-800 rounded transition-colors"
+                className="p-1.5 text-gray-400 hover:text-white hover:bg-carbon-800 rounded transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center cursor-pointer"
                 aria-label="Close Field Manual"
               >
                 <X className="w-5 h-5" />
@@ -3334,7 +3393,7 @@ export default function RoomPage() {
                     <Users className="w-4 h-4" />
                     <h4>Field Agent Directives (General Operations)</h4>
                   </div>
-                  <span className="text-[10px] bg-green-950 text-classified-terminal border border-green-800 px-2 py-0.5 rounded font-bold">
+                  <span className="text-nano bg-green-950 text-classified-terminal border border-green-800 px-2 py-0.5 rounded font-bold">
                     STANDARD PROTOCOL
                   </span>
                 </div>
@@ -3378,12 +3437,12 @@ export default function RoomPage() {
                 <button
                   id="spymaster-directives-toggle"
                   onClick={() => setIsSpymasterExpanded(!isSpymasterExpanded)}
-                  className="w-full p-4 flex items-center justify-between hover:bg-carbon-850/60 transition-colors text-left"
+                  className="w-full p-4 flex items-center justify-between hover:bg-carbon-850/60 transition-colors text-left min-h-[44px] cursor-pointer"
                 >
                   <div className="flex items-center gap-2 font-bold text-classified-amber uppercase tracking-wider text-sm">
                     <Lock className="w-4 h-4" />
                     <h4>Spymaster Directives</h4>
-                    <span className="text-[10px] bg-amber-950/80 text-classified-amber border border-amber-800 px-2 py-0.5 rounded font-bold ml-2">
+                    <span className="text-nano bg-amber-950/80 text-classified-amber border border-amber-800 px-2 py-0.5 rounded font-bold ml-2">
                       COMMAND CLEARANCE
                     </span>
                   </div>
@@ -3435,12 +3494,12 @@ export default function RoomPage() {
                 <button
                   id="mole-directives-toggle"
                   onClick={() => setIsMoleExpanded(!isMoleExpanded)}
-                  className="w-full p-4 flex items-center justify-between hover:bg-carbon-850/60 transition-colors text-left"
+                  className="w-full p-4 flex items-center justify-between hover:bg-carbon-850/60 transition-colors text-left min-h-[44px] cursor-pointer"
                 >
                   <div className="flex items-center gap-2 font-bold text-red-400 uppercase tracking-wider text-sm">
                     <UserX className="w-4 h-4 text-red-500" />
                     <h4>Covert Mole Directives</h4>
-                    <span className="text-[10px] bg-red-950/80 text-red-300 border border-red-800 px-2 py-0.5 rounded font-bold ml-2">
+                    <span className="text-nano bg-red-950/80 text-red-300 border border-red-800 px-2 py-0.5 rounded font-bold ml-2">
                       DEEP-COVER INFILTRATION
                     </span>
                   </div>
@@ -3488,11 +3547,11 @@ export default function RoomPage() {
             </div>
 
             {/* Modal Footer */}
-            <div className="p-4 bg-carbon-950 border-t border-carbon-800 flex items-center justify-between text-[11px] text-gray-500">
+            <div className="p-4 bg-carbon-950 border-t border-carbon-800 flex items-center justify-between text-micro text-gray-500">
               <span>SECURITY LEVEL: TOP SECRET // OPERATIONAL ARCHIVE</span>
               <button
                 onClick={() => setIsManualOpen(false)}
-                className="px-4 py-1.5 bg-carbon-800 hover:bg-carbon-700 text-white rounded font-mono uppercase text-xs tracking-wider transition-colors"
+                className="min-h-[44px] px-4 py-2 bg-carbon-800 hover:bg-carbon-700 text-white rounded font-mono uppercase text-xs tracking-wider transition-colors flex items-center justify-center cursor-pointer"
               >
                 DISMISS MANUAL
               </button>
@@ -3527,7 +3586,7 @@ export default function RoomPage() {
           </div>
           <div className="text-xs text-white font-bold mb-0.5">{dmAlert.senderName}</div>
           <p className="text-xs text-gray-300 line-clamp-2 italic">&quot;{dmAlert.preview}&quot;</p>
-          <div className="text-[10px] text-classified-amber uppercase tracking-wider mt-2 flex items-center justify-between border-t border-carbon-800 pt-1.5">
+          <div className="text-nano text-classified-amber uppercase tracking-wider mt-2 flex items-center justify-between border-t border-carbon-800 pt-1.5">
             <span>CLICK TO OPEN DIRECT LINE</span>
             <span>→</span>
           </div>
@@ -3545,7 +3604,7 @@ export default function RoomPage() {
             <div className="flex items-center gap-2">
               <span className="w-2.5 h-2.5 rounded-full bg-classified-amber animate-pulse"></span>
               <span className="font-bold text-classified-amber uppercase tracking-wider">DEV OPS CONSOLE</span>
-              <span className="text-[10px] bg-carbon-800 text-gray-400 px-1.5 py-0.5 rounded border border-carbon-700">
+              <span className="text-nano bg-carbon-800 text-gray-400 px-1.5 py-0.5 rounded border border-carbon-700">
                 PHASE: {room.phase}
               </span>
             </div>
@@ -3569,9 +3628,9 @@ export default function RoomPage() {
                       setIsDevActionLoading(false);
                     }
                   }}
-                  className="px-2.5 py-1 bg-carbon-800 hover:bg-carbon-700 text-classified-terminal border border-green-700 rounded font-bold uppercase tracking-wider disabled:opacity-50 cursor-pointer"
+                  className="px-3 py-1.5 bg-carbon-800 hover:bg-carbon-700 text-classified-terminal border border-green-700 rounded font-bold uppercase tracking-wider disabled:opacity-50 cursor-pointer min-h-[36px] flex items-center justify-center"
                 >
-                  🤖 Fill 5 Bots ({players.length}/6)
+                  [BOT+5] Fill 5 Bots ({players.length}/6)
                 </button>
               )}
 
@@ -3593,9 +3652,9 @@ export default function RoomPage() {
                       setIsDevActionLoading(false);
                     }
                   }}
-                  className="px-2.5 py-1 bg-carbon-800 hover:bg-carbon-700 text-classified-amber border border-amber-700 rounded font-bold uppercase tracking-wider cursor-pointer"
+                  className="px-3 py-1.5 bg-carbon-800 hover:bg-carbon-700 text-classified-amber border border-amber-700 rounded font-bold uppercase tracking-wider cursor-pointer min-h-[36px] flex items-center justify-center"
                 >
-                  ⏩ Warp: Midpoint (50%)
+                  [WARP: 50%] Midpoint
                 </button>
               )}
 
@@ -3617,9 +3676,9 @@ export default function RoomPage() {
                       setIsDevActionLoading(false);
                     }
                   }}
-                  className="px-2.5 py-1 bg-carbon-800 hover:bg-carbon-700 text-yellow-400 border border-yellow-700 rounded font-bold uppercase tracking-wider cursor-pointer"
+                  className="px-3 py-1.5 bg-carbon-800 hover:bg-carbon-700 text-yellow-400 border border-yellow-700 rounded font-bold uppercase tracking-wider cursor-pointer min-h-[36px] flex items-center justify-center"
                 >
-                  ⏩ Warp: Verdict
+                  [WARP: VERDICT]
                 </button>
               )}
 
@@ -3641,9 +3700,9 @@ export default function RoomPage() {
                       setIsDevActionLoading(false);
                     }
                   }}
-                  className="px-2.5 py-1 bg-carbon-800 hover:bg-carbon-700 text-red-400 border border-red-700 rounded font-bold uppercase tracking-wider cursor-pointer"
+                  className="px-3 py-1.5 bg-carbon-800 hover:bg-carbon-700 text-red-400 border border-red-700 rounded font-bold uppercase tracking-wider cursor-pointer min-h-[36px] flex items-center justify-center"
                 >
-                  ⏩ Complete Match (Debrief)
+                  [WARP: DEBRIEF] Complete Match
                 </button>
               )}
 
@@ -3668,13 +3727,13 @@ export default function RoomPage() {
                   }
                   setIsGodMode(!isGodMode);
                 }}
-                className={`px-2.5 py-1 rounded font-bold uppercase tracking-wider border cursor-pointer ${
+                className={`px-3 py-1.5 rounded font-bold uppercase tracking-wider border cursor-pointer min-h-[36px] flex items-center justify-center ${
                   isGodMode
                     ? "bg-classified-amber text-black border-classified-amber"
                     : "bg-carbon-800 hover:bg-carbon-700 text-gray-300 border-carbon-600"
                 }`}
               >
-                👁️ God Mode: {isGodMode ? "ON" : "OFF"}
+                [GOD: REVEAL] {isGodMode ? "ACTIVE" : "STANDBY"}
               </button>
 
               {/* Reset Lobby */}
@@ -3698,9 +3757,9 @@ export default function RoomPage() {
                     setIsDevActionLoading(false);
                   }
                 }}
-                className="px-2.5 py-1 bg-carbon-800 hover:bg-red-950 text-gray-400 hover:text-red-300 border border-carbon-700 rounded font-bold uppercase tracking-wider cursor-pointer"
+                className="px-3 py-1.5 bg-carbon-800 hover:bg-red-950 text-muted hover:text-classified-crimson border border-carbon-700 rounded font-bold uppercase tracking-wider cursor-pointer min-h-[36px] flex items-center justify-center"
               >
-                🔄 Reset Lobby
+                [RST: LOBBY] Reset Lobby
               </button>
             </div>
           </div>

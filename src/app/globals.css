@@ -76,3 +76,25 @@ html {
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
 }
+
+/* Tactile Press Plates & Diegetic Cold War Console */
+.classified-plate {
+  background-color: #0b0d10;
+  border: 1px solid #1f2633;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 4px 20px rgba(0, 0, 0, 0.5);
+}
+
+.teletype-tape {
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.15) 2px,
+    rgba(0, 0, 0, 0.15) 4px
+  );
+}
+
+.hold-progress-active {
+  transition: width 2s linear;
+}
+
