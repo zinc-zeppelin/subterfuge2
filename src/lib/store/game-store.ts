@@ -275,8 +275,8 @@ class GameStore {
     }
 
     const n = room.players.length;
-    if (n < 4 || n > 12 || n % 2 !== 0) {
-      throw new Error(`INVALID_ROSTER_COUNT: Required 4-12 even players. Current: ${n}`);
+    if (n < 6 || n > 12 || n % 2 !== 0) {
+      throw new Error(`INVALID_ROSTER_COUNT: Required 6-12 even players. Current: ${n}`);
     }
 
     const allReady = room.players.every((p) => p.isReady);

@@ -74,7 +74,7 @@ subterfuge2/
 Before modifying game logic, agents must understand the core rules:
 
 1. **Player Count & Balancing:**
-   - Rooms strictly require an **even number of operatives** ($N \in \{4, 6, 8, 10, 12\}$).
+   - Rooms strictly require an **even number of operatives** ($N \in \{6, 8, 10, 12\}$).
    - Evenly divided into apparent **Red Team** ($N/2$) and apparent **Blue Team** ($N/2$).
 2. **Role Distribution:**
    - **Spymaster:** Exactly 1 per team. Holds exclusive authority to submit final verdict guesses.

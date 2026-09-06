@@ -1072,7 +1072,7 @@ export default function RoomPage() {
 
   const { room, self, players, allVerdicts, codebook } = gameState;
   const isEven = players.length % 2 === 0;
-  const allReady = players.length >= 4 && isEven && players.every((p) => p.isReady);
+  const allReady = players.length >= 6 && isEven && players.every((p) => p.isReady);
   const isInfiltration = room.phase === "INFILTRATION";
 
   const redApparentPlayers = players.filter((p) => p.apparentTeam === "RED");
@@ -1506,8 +1506,8 @@ export default function RoomPage() {
               <ul className="space-y-2 text-gray-400">
                 <li className="flex items-center justify-between">
                   <span>Roster Count:</span>
-                  <span className={players.length >= 4 ? "text-classified-terminal" : "text-gray-500"}>
-                    {players.length} (Min 4)
+                  <span className={players.length >= 6 ? "text-classified-terminal" : "text-gray-500"}>
+                    {players.length} (Min 6)
                   </span>
                 </li>
                 <li className="flex items-center justify-between">
