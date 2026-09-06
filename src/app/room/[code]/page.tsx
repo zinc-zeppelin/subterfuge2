@@ -1398,7 +1398,7 @@ export default function RoomPage() {
                 Active Operatives ({players.length})
               </span>
               <span className="text-xs font-mono text-gray-500">
-                MIN: 4 // MAX: 12 // STRICTLY EVEN
+                MIN: 6 // MAX: 12 // STRICTLY EVEN
               </span>
             </div>
 
@@ -1589,8 +1589,16 @@ export default function RoomPage() {
               >
                 <ShieldAlert className="w-4 h-4 shrink-0" />
                 <span>
-                  TIEBREAKER RESOLVED: Base word scores were tied. The +2 Mole Indictment bonus awarded victory to{" "}
-                  <strong className="underline uppercase">{room.winner} FACTION</strong>!
+                  {room.winner === "DRAW" ? (
+                    <>
+                      MUTUAL TIEBREAKER: Base word scores were tied and both commands accurately indicted the enemy mole (+2 PTS each). Operational Stalemate maintained.
+                    </>
+                  ) : (
+                    <>
+                      TIEBREAKER RESOLVED: Base word scores were tied. The +2 Mole Indictment bonus awarded victory to{" "}
+                      <strong className="underline uppercase">{room.winner} FACTION</strong>!
+                    </>
+                  )}
                 </span>
               </div>
             )}
