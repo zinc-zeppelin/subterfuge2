@@ -41,7 +41,7 @@ test.describe("Slice 1: Six-Player Multi-Context Test Harness", () => {
     // 7. Verify on host's screen that all 6 are ready
     const hostPage = harness.sessions[0].page;
     await expect(hostPage.getByText("6/6 READY")).toBeVisible({ timeout: 10000 });
-    await expect(hostPage.getByText("BALANCED (EVEN)")).toBeVisible();
+    await expect(hostPage.getByText("(ODD OR EVEN)").first()).toBeVisible();
 
     // Verify deployment authorization button is enabled for the host
     const startBtn = hostPage.locator("#start-operation-btn");

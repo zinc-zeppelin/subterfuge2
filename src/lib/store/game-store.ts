@@ -10,6 +10,8 @@ import {
   MoleVerification,
   WordSuggestion,
   TeamVerdict,
+  ProposedVerdict,
+  TeamColor,
 } from "../types/game";
 import { getRandomTheme, drawWordsForTheme } from "../data/word-bank";
 import { randomUUID, randomInt } from "crypto";
@@ -275,8 +277,8 @@ class GameStore {
     }
 
     const n = room.players.length;
-    if (n < 6 || n > 12 || n % 2 !== 0) {
-      throw new Error(`INVALID_ROSTER_COUNT: Required 6-12 even players. Current: ${n}`);
+    if (n < 6 || n > 12) {
+      throw new Error(`INVALID_ROSTER_COUNT: Required 6-12 operatives. Current: ${n}`);
     }
 
     const allReady = room.players.every((p) => p.isReady);
@@ -291,48 +293,40 @@ class GameStore {
       [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
     }
 
-    const half = n / 2;
-    const redPlayers = shuffled.slice(0, half);
-    const bluePlayers = shuffled.slice(half);
+    // Even split or 50/50 randomized split for odd player counts (e.g. 4 vs 3)
+    const isRedLarger = Math.random() < 0.5;
+    const redSize = n % 2 === 0 ? n / 2 : (isRedLarger ? Math.ceil(n / 2) : Math.floor(n / 2));
+    const redPlayers = shuffled.slice(0, redSize);
+    const bluePlayers = shuffled.slice(redSize);
 
     // Moles per team: 2 moles each at 12 players, otherwise 1 mole each
     const moleCount = n === 12 ? 2 : 1;
 
     // Assign Red Team:
-    // redPlayers[0] -> Spymaster (loyal)
-    // redPlayers[1..moleCount] -> Mole (apparent Red, actual Blue)
-    // Remaining -> Agent (loyal)
-    redPlayers[0].apparentTeam = "RED";
-    redPlayers[0].actualTeam = "RED";
-    redPlayers[0].role = "SPYMASTER";
-
-    for (let i = 1; i <= moleCount; i++) {
+    // redPlayers[0..moleCount-1] -> Mole (apparent Red, actual Blue)
+    // Remaining -> Agent (loyal Red)
+    for (let i = 0; i < moleCount; i++) {
       redPlayers[i].apparentTeam = "RED";
       redPlayers[i].actualTeam = "BLUE";
       redPlayers[i].role = "MOLE";
     }
 
-    for (let i = 1 + moleCount; i < redPlayers.length; i++) {
+    for (let i = moleCount; i < redPlayers.length; i++) {
       redPlayers[i].apparentTeam = "RED";
       redPlayers[i].actualTeam = "RED";
       redPlayers[i].role = "AGENT";
     }
 
     // Assign Blue Team:
-    // bluePlayers[0] -> Spymaster (loyal)
-    // bluePlayers[1..moleCount] -> Mole (apparent Blue, actual Red)
-    // Remaining -> Agent (loyal)
-    bluePlayers[0].apparentTeam = "BLUE";
-    bluePlayers[0].actualTeam = "BLUE";
-    bluePlayers[0].role = "SPYMASTER";
-
-    for (let i = 1; i <= moleCount; i++) {
+    // bluePlayers[0..moleCount-1] -> Mole (apparent Blue, actual Red)
+    // Remaining -> Agent (loyal Blue)
+    for (let i = 0; i < moleCount; i++) {
       bluePlayers[i].apparentTeam = "BLUE";
       bluePlayers[i].actualTeam = "RED";
       bluePlayers[i].role = "MOLE";
     }
 
-    for (let i = 1 + moleCount; i < bluePlayers.length; i++) {
+    for (let i = moleCount; i < bluePlayers.length; i++) {
       bluePlayers[i].apparentTeam = "BLUE";
       bluePlayers[i].actualTeam = "BLUE";
       bluePlayers[i].role = "AGENT";
@@ -403,17 +397,17 @@ class GameStore {
         if (red?.moleIndictmentId) {
           const indictedByRed = room.players.find((p) => p.id === red.moleIndictmentId);
           if (indictedByRed && indictedByRed.role === "MOLE") {
-            redScore += 2;
+            redScore += 20;
             red.score = redScore;
-            red.tiebreakerBonus = 2;
+            red.tiebreakerBonus = 20;
           }
         }
         if (blue?.moleIndictmentId) {
           const indictedByBlue = room.players.find((p) => p.id === blue.moleIndictmentId);
           if (indictedByBlue && indictedByBlue.role === "MOLE") {
-            blueScore += 2;
+            blueScore += 20;
             blue.score = blueScore;
-            blue.tiebreakerBonus = 2;
+            blue.tiebreakerBonus = 20;
           }
         }
       }
@@ -494,6 +488,10 @@ class GameStore {
         self.apparentTeam && room.suggestions?.[self.apparentTeam]
           ? [...room.suggestions[self.apparentTeam]].sort((a, b) => b.votes.length - a.votes.length)
           : [],
+      proposedVerdict:
+        self.apparentTeam && room.proposedVerdicts?.[self.apparentTeam]
+          ? room.proposedVerdicts[self.apparentTeam]
+          : undefined,
       teamVerdict: self.apparentTeam && room.verdicts?.[self.apparentTeam]
         ? room.verdicts[self.apparentTeam]
         : undefined,
@@ -825,40 +823,42 @@ class GameStore {
       }
 
       const allAssignedWords = room.players.map((p) => p.assignedWord).filter(Boolean) as string[];
-      const redSpymaster =
-        room.players.find((p) => p.apparentTeam === "RED" && p.role === "SPYMASTER") ||
-        room.players.find((p) => p.apparentTeam === "RED");
-      const blueSpymaster =
-        room.players.find((p) => p.apparentTeam === "BLUE" && p.role === "SPYMASTER") ||
-        room.players.find((p) => p.apparentTeam === "BLUE");
+      const redLead = room.players.find((p) => p.apparentTeam === "RED");
+      const blueLead = room.players.find((p) => p.apparentTeam === "BLUE");
       const blueMole = room.players.find((p) => p.actualTeam === "BLUE" && p.role === "MOLE");
       const redMole = room.players.find((p) => p.actualTeam === "RED" && p.role === "MOLE");
 
-      if (!room.verdicts["RED"] && redSpymaster) {
+      if (!room.verdicts["RED"] && redLead) {
+        const proposed = room.proposedVerdicts?.["RED"];
         room.verdicts["RED"] = {
           team: "RED",
-          submittedBy: redSpymaster.id,
-          submittedByName: redSpymaster.displayName,
-          guesses: allAssignedWords.slice(0, Math.min(room.players.length, allAssignedWords.length)),
-          moleIndictmentId: redMole?.id,
-          moleIndictmentName: redMole?.displayName,
+          submittedBy: proposed?.proposedBy || redLead.id,
+          submittedByName: proposed?.proposedByName || redLead.displayName,
+          guesses: proposed?.guesses || allAssignedWords.slice(0, Math.min(room.players.length, allAssignedWords.length)),
+          moleIndictmentId: proposed?.moleIndictmentId || redMole?.id,
+          moleIndictmentName: proposed?.moleIndictmentName || redMole?.displayName,
           score: allAssignedWords.length,
           correctGuesses: [...allAssignedWords],
           submittedAt: new Date().toISOString(),
+          confirmedBy: proposed?.confirmedBy || [redLead.id],
+          confirmedByNames: proposed?.confirmedByNames || [redLead.displayName],
         };
       }
 
-      if (!room.verdicts["BLUE"] && blueSpymaster) {
+      if (!room.verdicts["BLUE"] && blueLead) {
+        const proposed = room.proposedVerdicts?.["BLUE"];
         room.verdicts["BLUE"] = {
           team: "BLUE",
-          submittedBy: blueSpymaster.id,
-          submittedByName: blueSpymaster.displayName,
-          guesses: allAssignedWords.slice(0, Math.min(room.players.length, allAssignedWords.length)),
-          moleIndictmentId: blueMole?.id,
-          moleIndictmentName: blueMole?.displayName,
+          submittedBy: proposed?.proposedBy || blueLead.id,
+          submittedByName: proposed?.proposedByName || blueLead.displayName,
+          guesses: proposed?.guesses || allAssignedWords.slice(0, Math.min(room.players.length, allAssignedWords.length)),
+          moleIndictmentId: proposed?.moleIndictmentId || blueMole?.id,
+          moleIndictmentName: proposed?.moleIndictmentName || blueMole?.displayName,
           score: allAssignedWords.length,
           correctGuesses: [...allAssignedWords],
           submittedAt: new Date().toISOString(),
+          confirmedBy: proposed?.confirmedBy || [blueLead.id],
+          confirmedByNames: proposed?.confirmedByNames || [blueLead.displayName],
         };
       }
 
@@ -1038,9 +1038,17 @@ class GameStore {
   public async submitTeamVerdict(params: {
     code: string;
     sessionToken: string;
-    guesses: string[];
+    guesses?: string[];
     moleIndictmentId?: string;
-  }): Promise<{ verdict: TeamVerdict; room: Room }> {
+    confirmOnly?: boolean;
+  }): Promise<{
+    verdict?: TeamVerdict;
+    proposedVerdict?: ProposedVerdict;
+    room: Room;
+    locked: boolean;
+    confirmedCount: number;
+    requiredCount: number;
+  }> {
     const data = await this.load();
     const upperCode = params.code.toUpperCase();
     const room = data.rooms[upperCode];
@@ -1053,16 +1061,134 @@ class GameStore {
     const caller = room.players.find((p) => p.sessionToken === params.sessionToken);
     if (!caller || !caller.apparentTeam) throw new Error("UNAUTHORIZED: Invalid operative session");
 
-    if (caller.role !== "SPYMASTER") {
-      throw new Error("UNAUTHORIZED: Only the designated Spymaster holds exclusive lock-in authority");
-    }
-
     const team = caller.apparentTeam;
     const n = room.players.length;
 
-    // Clean and deduplicate guesses
+    if (!room.proposedVerdicts) {
+      room.proposedVerdicts = {};
+    }
+    if (!room.verdicts) {
+      room.verdicts = { RED: undefined as any, BLUE: undefined as any };
+    }
+
+    if (room.verdicts[team]) {
+      return {
+        verdict: room.verdicts[team]!,
+        room,
+        locked: true,
+        confirmedCount: room.verdicts[team]!.confirmedBy?.length || 2,
+        requiredCount: 2,
+      };
+    }
+
+    const existing = room.proposedVerdicts[team];
+    let isConfirming = false;
+
+    if (existing) {
+      if (params.confirmOnly) {
+        isConfirming = true;
+      } else if (params.guesses && params.guesses.length > 0) {
+        const existingSet = new Set(existing.guesses.map((w) => w.toUpperCase()));
+        const newClean = params.guesses
+          .map((g) => g.trim().toUpperCase().replace(/[^A-Z0-9-]/g, ""))
+          .filter(Boolean);
+        const sameGuesses =
+          newClean.length === existing.guesses.length &&
+          newClean.every((w) => existingSet.has(w));
+        const sameMole = (params.moleIndictmentId || undefined) === (existing.moleIndictmentId || undefined);
+        if (sameGuesses && sameMole) {
+          isConfirming = true;
+        }
+      }
+    }
+
+    if (isConfirming && existing) {
+      if (!existing.confirmedBy.includes(caller.id)) {
+        existing.confirmedBy.push(caller.id);
+        existing.confirmedByNames.push(caller.displayName);
+      }
+
+      if (existing.confirmedBy.length >= 2) {
+        // Two teammates agreed: Lock the official team verdict!
+        const scoring = this.calculateTeamVerdictScore(
+          room,
+          team,
+          existing.guesses,
+          existing.moleIndictmentId
+        );
+
+        const verdict: TeamVerdict = {
+          team,
+          submittedBy: existing.proposedBy,
+          submittedByName: existing.proposedByName,
+          guesses: existing.guesses,
+          moleIndictmentId: existing.moleIndictmentId,
+          moleIndictmentName: scoring.moleIndictmentName,
+          score: scoring.score,
+          enemyExtractionScore: scoring.enemyExtractionScore,
+          internalDeductionScore: scoring.internalDeductionScore,
+          moleBonusScore: scoring.moleBonusScore,
+          correctGuesses: scoring.correctGuesses,
+          submittedAt: new Date().toISOString(),
+          confirmedBy: existing.confirmedBy,
+          confirmedByNames: existing.confirmedByNames,
+        };
+
+        room.verdicts[team] = verdict;
+        delete room.proposedVerdicts[team];
+
+        // Check if BOTH teams have locked
+        const red = room.verdicts["RED"];
+        const blue = room.verdicts["BLUE"];
+
+        if (red && blue) {
+          const redBase = Math.max(0, (red.enemyExtractionScore || 0) - (red.internalDeductionScore || 0));
+          const blueBase = Math.max(0, (blue.enemyExtractionScore || 0) - (blue.internalDeductionScore || 0));
+          const redScore = red.score || 0;
+          const blueScore = blue.score || 0;
+
+          if (redBase === blueBase && (red.moleBonusScore || 0) !== (blue.moleBonusScore || 0)) {
+            if (redScore > blueScore && (red.moleBonusScore || 0) > 0) {
+              red.tiebreakerBonus = red.moleBonusScore;
+            } else if (blueScore > redScore && (blue.moleBonusScore || 0) > 0) {
+              blue.tiebreakerBonus = blue.moleBonusScore;
+            }
+          }
+
+          if (redScore > blueScore) {
+            room.winner = "RED";
+          } else if (blueScore > redScore) {
+            room.winner = "BLUE";
+          } else {
+            room.winner = "DRAW";
+          }
+
+          room.phase = "DEBRIEF";
+        }
+
+        await this.save(data);
+        return {
+          verdict,
+          room,
+          locked: true,
+          confirmedCount: 2,
+          requiredCount: 2,
+        };
+      } else {
+        await this.save(data);
+        return {
+          proposedVerdict: existing,
+          room,
+          locked: false,
+          confirmedCount: existing.confirmedBy.length,
+          requiredCount: 2,
+        };
+      }
+    }
+
+    // New or updated proposal
     const cleanedGuesses: string[] = [];
-    for (const g of params.guesses) {
+    for (const g of params.guesses || []) {
       const clean = g.trim().toUpperCase().replace(/[^A-Z0-9-]/g, "");
       if (clean && !cleanedGuesses.includes(clean)) {
         cleanedGuesses.push(clean);
@@ -1073,15 +1199,6 @@ class GameStore {
       throw new Error(`GUESS_LIMIT_EXCEEDED: Cannot submit more than ${n} code word guesses`);
     }
 
-    // Codebook target words normalized for robust matching
-    const normalize = (w: string) => w.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
-    const targetWordsNormalized = Object.values(room.codebook || {}).map(normalize);
-
-    const correctGuesses = cleanedGuesses.filter((g) =>
-      targetWordsNormalized.includes(normalize(g))
-    );
-    const score = correctGuesses.length;
-
     let moleIndictmentName: string | undefined;
     if (params.moleIndictmentId) {
       const indicted = room.players.find((p) => p.id === params.moleIndictmentId);
@@ -1090,64 +1207,93 @@ class GameStore {
       }
     }
 
-    const verdict: TeamVerdict = {
+    const proposed: ProposedVerdict = {
       team,
-      submittedBy: caller.id,
-      submittedByName: caller.displayName,
+      proposedBy: caller.id,
+      proposedByName: caller.displayName,
       guesses: cleanedGuesses,
       moleIndictmentId: params.moleIndictmentId,
       moleIndictmentName,
-      score,
-      correctGuesses,
-      submittedAt: new Date().toISOString(),
+      proposedAt: new Date().toISOString(),
+      confirmedBy: [caller.id],
+      confirmedByNames: [caller.displayName],
     };
 
-    if (!room.verdicts) {
-      room.verdicts = { RED: undefined as any, BLUE: undefined as any };
-    }
-    room.verdicts[team] = verdict;
-
-    // Check if BOTH teams have submitted
-    const red = room.verdicts["RED"];
-    const blue = room.verdicts["BLUE"];
-
-    if (red && blue) {
-      let redScore = red.score || 0;
-      let blueScore = blue.score || 0;
-
-      // Tiebreaker resolution: Mole Indictments (+2 points for correctly identifying a Mole)
-      if (redScore === blueScore) {
-        if (red.moleIndictmentId) {
-          const indictedByRed = room.players.find((p) => p.id === red.moleIndictmentId);
-          if (indictedByRed && indictedByRed.role === "MOLE") {
-            redScore += 2;
-            red.score = redScore;
-            red.tiebreakerBonus = 2;
-          }
-        }
-        if (blue.moleIndictmentId) {
-          const indictedByBlue = room.players.find((p) => p.id === blue.moleIndictmentId);
-          if (indictedByBlue && indictedByBlue.role === "MOLE") {
-            blueScore += 2;
-            blue.score = blueScore;
-            blue.tiebreakerBonus = 2;
-          }
-        }
-      }
-
-      if (redScore > blueScore) {
-        room.winner = "RED";
-      } else if (blueScore > redScore) {
-        room.winner = "BLUE";
-      } else {
-        room.winner = "DRAW";
-      }
-
-      room.phase = "DEBRIEF";
-    }
-
+    room.proposedVerdicts[team] = proposed;
     await this.save(data);
-    return { verdict, room };
+
+    return {
+      proposedVerdict: proposed,
+      room,
+      locked: false,
+      confirmedCount: 1,
+      requiredCount: 2,
+    };
+  }
+
+  private calculateTeamVerdictScore(
+    room: Room,
+    team: TeamColor,
+    guesses: string[],
+    moleIndictmentId?: string
+  ): {
+    score: number;
+    enemyExtractionScore: number;
+    internalDeductionScore: number;
+    moleBonusScore: number;
+    correctGuesses: string[];
+    moleIndictmentName?: string;
+  } {
+    const normalize = (w: string) => w.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+    const guessSet = new Set(guesses.map(normalize));
+
+    const ownTeamPlayers = room.players.filter((p) => p.apparentTeam === team);
+    const enemyTeamPlayers = room.players.filter((p) => p.apparentTeam !== team);
+
+    const ownWords = ownTeamPlayers
+      .map((p) => p.assignedWord)
+      .filter((w): w is string => Boolean(w))
+      .map(normalize);
+    const enemyWords = enemyTeamPlayers
+      .map((p) => p.assignedWord)
+      .filter((w): w is string => Boolean(w))
+      .map(normalize);
+
+    const enemyFound = enemyWords.filter((w) => guessSet.has(w));
+    const enemyExtractionScore = enemyWords.length > 0
+      ? Math.round((enemyFound.length / enemyWords.length) * 100)
+      : 0;
+
+    const ownFound = ownWords.filter((w) => guessSet.has(w));
+    const missedOwnCount = ownWords.length - ownFound.length;
+    const internalDeductionScore = missedOwnCount * 20;
+
+    let moleBonusScore = 0;
+    let moleIndictmentName: string | undefined;
+    if (moleIndictmentId) {
+      const indicted = room.players.find((p) => p.id === moleIndictmentId);
+      if (indicted) {
+        moleIndictmentName = indicted.displayName;
+        if (indicted.role === "MOLE") {
+          moleBonusScore = 20;
+        }
+      }
+    }
+
+    const baseRating = Math.max(0, enemyExtractionScore - internalDeductionScore);
+    const score = baseRating + moleBonusScore;
+
+    const allTargetWords = [...ownWords, ...enemyWords];
+    const correctGuesses = guesses.filter((g) => allTargetWords.includes(normalize(g)));
+
+    return {
+      score,
+      enemyExtractionScore,
+      internalDeductionScore,
+      moleBonusScore,
+      correctGuesses,
+      moleIndictmentName,
+    };
   }
 
   public async rematchOperation(code: string, sessionToken: string): Promise<Room> {

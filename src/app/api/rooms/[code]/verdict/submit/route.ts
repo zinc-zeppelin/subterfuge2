@@ -21,9 +21,9 @@ export async function POST(
     }
 
     const body = await req.json();
-    const { guesses, moleIndictmentId } = body;
+    const { guesses, moleIndictmentId, confirmOnly } = body;
 
-    if (!Array.isArray(guesses)) {
+    if (!confirmOnly && !Array.isArray(guesses)) {
       return NextResponse.json(
         { error: "INVALID_REQUEST: guesses must be an array of code words" },
         { status: 400 }
@@ -33,21 +33,38 @@ export async function POST(
     const result = await gameStore.submitTeamVerdict({
       code,
       sessionToken,
-      guesses,
+      guesses: guesses || [],
       moleIndictmentId,
+      confirmOnly,
     });
 
     const isDebrief = result.room.phase === "DEBRIEF";
-    const sanitizedVerdict = {
-      team: result.verdict.team,
-      submittedByName: result.verdict.submittedByName,
-      guesses: result.verdict.guesses,
-      submittedAt: result.verdict.submittedAt,
-      score: isDebrief ? result.verdict.score : undefined,
-      correctGuesses: isDebrief ? result.verdict.correctGuesses : undefined,
-    };
+    if (result.locked && result.verdict) {
+      const sanitizedVerdict = {
+        team: result.verdict.team,
+        submittedByName: result.verdict.submittedByName,
+        guesses: result.verdict.guesses,
+        submittedAt: result.verdict.submittedAt,
+        score: isDebrief ? result.verdict.score : undefined,
+        correctGuesses: isDebrief ? result.verdict.correctGuesses : undefined,
+      };
 
-    return NextResponse.json({ success: true, verdict: sanitizedVerdict });
+      return NextResponse.json({
+        success: true,
+        locked: true,
+        confirmedCount: result.confirmedCount,
+        requiredCount: result.requiredCount,
+        verdict: sanitizedVerdict,
+      });
+    }
+
+    return NextResponse.json({
+      success: true,
+      locked: false,
+      confirmedCount: result.confirmedCount,
+      requiredCount: result.requiredCount,
+      proposedVerdict: result.proposedVerdict,
+    });
   } catch (error: any) {
     const status = error.message.includes("UNAUTHORIZED") ? 403 : 400;
     return NextResponse.json({ error: error.message }, { status });

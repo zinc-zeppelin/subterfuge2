@@ -65,11 +65,11 @@ export default function RoomPage() {
   const [timeLeft, setTimeLeft] = useState<string>("--:--:--");
   const [midpointLeft, setMidpointLeft] = useState<string | null>(null);
 
-  // Verdict Deliberation & Spymaster Lock-In State
+  // Verdict Deliberation & Team Consensus State
   const [proposalInput, setProposalInput] = useState("");
   const [isProposing, setIsProposing] = useState(false);
-  const [spymasterWordInput, setSpymasterWordInput] = useState("");
-  const [spymasterGuesses, setSpymasterGuesses] = useState<string[]>([]);
+  const [verdictWordInput, setVerdictWordInput] = useState("");
+  const [verdictGuesses, setVerdictGuesses] = useState<string[]>([]);
   const [moleIndictmentId, setMoleIndictmentId] = useState<string>("");
   const [isSubmittingVerdict, setIsSubmittingVerdict] = useState(false);
   const [verdictError, setVerdictError] = useState<string | null>(null);
@@ -77,7 +77,7 @@ export default function RoomPage() {
 
   // Operational Field Manual State
   const [isManualOpen, setIsManualOpen] = useState(false);
-  const [isSpymasterExpanded, setIsSpymasterExpanded] = useState(false);
+  const [isConsensusExpanded, setIsConsensusExpanded] = useState(false);
   const [isMoleExpanded, setIsMoleExpanded] = useState(false);
 
   // In-Page Direct Join & Session Isolation State
@@ -755,14 +755,10 @@ export default function RoomPage() {
   }, [gameState, selectedPeerId]);
 
   const handleOpenManual = () => {
-    if (gameState?.self.role === "SPYMASTER") {
-      setIsSpymasterExpanded(true);
-      setIsMoleExpanded(false);
-    } else if (gameState?.self.role === "MOLE") {
+    setIsConsensusExpanded(false);
+    if (gameState?.self.role === "MOLE") {
       setIsMoleExpanded(true);
-      setIsSpymasterExpanded(false);
     } else {
-      setIsSpymasterExpanded(false);
       setIsMoleExpanded(false);
     }
     setIsManualOpen(true);
@@ -770,12 +766,8 @@ export default function RoomPage() {
 
   // Auto-expand relevant role section in Field Manual when role is assigned
   useEffect(() => {
-    if (gameState?.self.role === "SPYMASTER") {
-      setIsSpymasterExpanded(true);
-      setIsMoleExpanded(false);
-    } else if (gameState?.self.role === "MOLE") {
+    if (gameState?.self.role === "MOLE") {
       setIsMoleExpanded(true);
-      setIsSpymasterExpanded(false);
     }
   }, [gameState?.self.role]);
 
@@ -1143,32 +1135,33 @@ export default function RoomPage() {
     }
   };
 
-  const handleAddSpymasterGuess = (wordToAdd?: string) => {
-    const raw = wordToAdd || spymasterWordInput;
+  const handleAddVerdictGuess = (wordToAdd?: string) => {
+    const raw = wordToAdd || verdictWordInput;
     const word = raw.trim().toUpperCase().replace(/[^A-Z0-9-]/g, "");
     if (!word) return;
-    if (!spymasterGuesses.includes(word)) {
-      if (spymasterGuesses.length >= (gameState?.players.length || 6)) {
+    if (!verdictGuesses.includes(word)) {
+      if (verdictGuesses.length >= (gameState?.players.length || 6)) {
         setVerdictError(`Cannot add more than ${gameState?.players.length} code words.`);
         return;
       }
-      setSpymasterGuesses((prev) => [...prev, word]);
+      setVerdictGuesses((prev) => [...prev, word]);
       setVerdictError(null);
-      if (!wordToAdd) setSpymasterWordInput("");
+      if (!wordToAdd) setVerdictWordInput("");
     }
   };
 
-  const handleRemoveSpymasterGuess = (wordToRemove: string) => {
-    setSpymasterGuesses((prev) => prev.filter((w) => w !== wordToRemove));
+  const handleRemoveVerdictGuess = (wordToRemove: string) => {
+    setVerdictGuesses((prev) => prev.filter((w) => w !== wordToRemove));
   };
 
   const handleSubmitVerdict = () => {
-    if (!code || isSubmittingVerdict || spymasterGuesses.length === 0) return;
+    if (!code || isSubmittingVerdict || verdictGuesses.length === 0) return;
     setIsConfirmingVerdict(true);
   };
 
-  const executeSubmitVerdict = async () => {
-    if (!code || isSubmittingVerdict || spymasterGuesses.length === 0) return;
+  const executeSubmitVerdict = async (confirmOnly: boolean = false) => {
+    if (!code || isSubmittingVerdict) return;
+    if (!confirmOnly && verdictGuesses.length === 0) return;
     setIsSubmittingVerdict(true);
     setIsConfirmingVerdict(false);
     setVerdictError(null);
@@ -1177,13 +1170,14 @@ export default function RoomPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          guesses: spymasterGuesses,
+          guesses: verdictGuesses,
           moleIndictmentId: moleIndictmentId || undefined,
+          confirmOnly,
         }),
       });
       if (!res.ok) {
         const data = await res.json();
-        throw new Error(data.error || "Failed to lock in verdict");
+        throw new Error(data.error || "Failed to transmit verdict");
       }
       await fetchState();
     } catch (err: any) {
@@ -1205,8 +1199,8 @@ export default function RoomPage() {
         const err = await res.json();
         throw new Error(err.error || "Failed to authorize rematch");
       }
-      setSpymasterGuesses([]);
-      setSpymasterWordInput("");
+      setVerdictGuesses([]);
+      setVerdictWordInput("");
       setProposalInput("");
       setMoleToast(null);
       setIsDecrypted(false);
@@ -1591,8 +1585,8 @@ export default function RoomPage() {
   }
 
   const { room, self, players, allVerdicts, codebook } = gameState;
-  const isEven = players.length % 2 === 0;
-  const allReady = players.length >= 6 && isEven && players.every((p) => p.isReady);
+  const isRosterValid = players.length >= 6 && players.length <= 12;
+  const allReady = isRosterValid && players.every((p) => p.isReady);
   const isInfiltration = room.phase === "INFILTRATION";
 
   const redApparentPlayers = players.filter((p) => p.apparentTeam === "RED");
@@ -1960,7 +1954,7 @@ export default function RoomPage() {
                 Active Operatives ({players.length})
               </span>
               <span className="text-xs font-mono text-gray-500">
-                MIN: 6 // MAX: 12 // STRICTLY EVEN
+                MIN: 6 // MAX: 12 (ODD OR EVEN)
               </span>
             </div>
 
@@ -2073,9 +2067,9 @@ export default function RoomPage() {
                   </span>
                 </li>
                 <li className="flex items-center justify-between">
-                  <span>Even Balance:</span>
-                  <span className={isEven ? "text-classified-terminal" : "text-classified-crimson"}>
-                    {isEven ? "BALANCED (EVEN)" : "UNBALANCED (ODD)"}
+                  <span>Roster Quorum:</span>
+                  <span className={isRosterValid ? "text-classified-terminal" : "text-gray-500"}>
+                    {players.length}/6-12 (ODD OR EVEN)
                   </span>
                 </li>
                 <li className="flex items-center justify-between">
@@ -2090,7 +2084,7 @@ export default function RoomPage() {
                 <button
                   id="start-operation-btn"
                   onClick={handleStartOperation}
-                  disabled={!isEven || !allReady || isStartingOperation}
+                  disabled={!isRosterValid || !allReady || isStartingOperation}
                   className="w-full min-h-[48px] mt-4 py-3.5 bg-classified-crimson hover:bg-red-800 disabled:opacity-30 text-white font-bold tracking-wider uppercase rounded transition-colors text-xs active:scale-[0.99] cursor-pointer"
                 >
                   {isStartingOperation ? "INITIALIZING INFILTRATION..." : "AUTHORIZE DEPLOYMENT"}
@@ -2153,11 +2147,11 @@ export default function RoomPage() {
                 <span>
                   {room.winner === "DRAW" ? (
                     <>
-                      MUTUAL TIEBREAKER: Base word scores were tied and both commands accurately indicted the enemy mole (+2 PTS each). Operational Stalemate maintained.
+                      MUTUAL TIEBREAKER: Base word scores were tied and both commands accurately indicted the enemy mole (+20% each). Operational Stalemate maintained.
                     </>
                   ) : (
                     <>
-                      TIEBREAKER RESOLVED: Base word scores were tied. The +2 Mole Indictment bonus awarded victory to{" "}
+                      TIEBREAKER RESOLVED: Base word scores were tied. The +20% Mole Indictment bonus awarded victory to{" "}
                       <strong className="underline uppercase">{room.winner} FACTION</strong>!
                     </>
                   )}
@@ -2181,28 +2175,34 @@ export default function RoomPage() {
                     <Flag className="w-4 h-4" /> RED FACTION
                   </span>
                   <span className="text-xs text-gray-400">
-                    Spymaster: {allVerdicts?.RED?.submittedByName || "N/A"}
+                    Verified by: {allVerdicts?.RED?.confirmedByNames?.join(", ") || allVerdicts?.RED?.submittedByName || "Consensus"}
                   </span>
                 </div>
                 <div className="text-3xl font-black text-white mb-1">
-                  {allVerdicts?.RED?.score ?? 0}{" "}
-                  <span className="text-xs font-normal text-gray-400">PTS</span>
+                  {allVerdicts?.RED?.score ?? 0}%{" "}
+                  <span className="text-xs font-normal text-gray-400">RATING</span>
                 </div>
                 <div className="text-xs text-gray-400 space-y-1 border-t border-red-900/40 pt-2 mt-2">
                   <div className="flex justify-between">
-                    <span>Correct Code Words:</span>
-                    <span className="text-white font-bold">
-                      {allVerdicts?.RED?.correctGuesses?.length ?? 0} / {allVerdicts?.RED?.guesses?.length ?? 0}
+                    <span>Enemy Extraction:</span>
+                    <span className="text-classified-terminal font-bold">
+                      +{allVerdicts?.RED?.enemyExtractionScore ?? 0}%
                     </span>
                   </div>
-                  {allVerdicts?.RED?.tiebreakerBonus && (
-                    <div className="flex justify-between text-classified-terminal font-bold">
-                      <span>Mole Indictment Bonus:</span>
-                      <span>+2 PTS</span>
-                    </div>
-                  )}
+                  <div className="flex justify-between">
+                    <span>Internal Sabotage Penalty:</span>
+                    <span className={(allVerdicts?.RED?.internalDeductionScore ?? 0) > 0 ? "text-red-400 font-bold" : "text-gray-400"}>
+                      -{allVerdicts?.RED?.internalDeductionScore ?? 0}%
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Mole Indictment Bonus:</span>
+                    <span className={(allVerdicts?.RED?.moleBonusScore ?? 0) > 0 ? "text-classified-terminal font-bold" : "text-gray-400"}>
+                      +{(allVerdicts?.RED?.moleBonusScore ?? 0)}%
+                    </span>
+                  </div>
                   {allVerdicts?.RED?.moleIndictmentName && (
-                    <div className="flex justify-between text-micro text-gray-400">
+                    <div className="flex justify-between text-micro text-gray-400 border-t border-red-900/20 pt-1">
                       <span>Indicted Operative:</span>
                       <span className="text-red-300">{allVerdicts.RED.moleIndictmentName}</span>
                     </div>
@@ -2224,28 +2224,34 @@ export default function RoomPage() {
                     <Flag className="w-4 h-4" /> BLUE FACTION
                   </span>
                   <span className="text-xs text-gray-400">
-                    Spymaster: {allVerdicts?.BLUE?.submittedByName || "N/A"}
+                    Verified by: {allVerdicts?.BLUE?.confirmedByNames?.join(", ") || allVerdicts?.BLUE?.submittedByName || "Consensus"}
                   </span>
                 </div>
                 <div className="text-3xl font-black text-white mb-1">
-                  {allVerdicts?.BLUE?.score ?? 0}{" "}
-                  <span className="text-xs font-normal text-gray-400">PTS</span>
+                  {allVerdicts?.BLUE?.score ?? 0}%{" "}
+                  <span className="text-xs font-normal text-gray-400">RATING</span>
                 </div>
                 <div className="text-xs text-gray-400 space-y-1 border-t border-blue-900/40 pt-2 mt-2">
                   <div className="flex justify-between">
-                    <span>Correct Code Words:</span>
-                    <span className="text-white font-bold">
-                      {allVerdicts?.BLUE?.correctGuesses?.length ?? 0} / {allVerdicts?.BLUE?.guesses?.length ?? 0}
+                    <span>Enemy Extraction:</span>
+                    <span className="text-classified-terminal font-bold">
+                      +{allVerdicts?.BLUE?.enemyExtractionScore ?? 0}%
                     </span>
                   </div>
-                  {allVerdicts?.BLUE?.tiebreakerBonus && (
-                    <div className="flex justify-between text-classified-terminal font-bold">
-                      <span>Mole Indictment Bonus:</span>
-                      <span>+2 PTS</span>
-                    </div>
-                  )}
+                  <div className="flex justify-between">
+                    <span>Internal Sabotage Penalty:</span>
+                    <span className={(allVerdicts?.BLUE?.internalDeductionScore ?? 0) > 0 ? "text-red-400 font-bold" : "text-gray-400"}>
+                      -{allVerdicts?.BLUE?.internalDeductionScore ?? 0}%
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Mole Indictment Bonus:</span>
+                    <span className={(allVerdicts?.BLUE?.moleBonusScore ?? 0) > 0 ? "text-classified-terminal font-bold" : "text-gray-400"}>
+                      +{(allVerdicts?.BLUE?.moleBonusScore ?? 0)}%
+                    </span>
+                  </div>
                   {allVerdicts?.BLUE?.moleIndictmentName && (
-                    <div className="flex justify-between text-micro text-gray-400">
+                    <div className="flex justify-between text-micro text-gray-400 border-t border-blue-900/20 pt-1">
                       <span>Indicted Operative:</span>
                       <span className="text-blue-300">{allVerdicts.BLUE.moleIndictmentName}</span>
                     </div>
@@ -2413,9 +2419,7 @@ export default function RoomPage() {
                       </span>
                       <span
                         className={`text-nano font-bold px-2 py-0.5 rounded uppercase ${
-                          p.role === "SPYMASTER"
-                            ? "bg-amber-950 text-amber-400 border border-amber-800"
-                            : p.role === "MOLE"
+                          p.role === "MOLE"
                             ? "bg-red-900 text-red-200 border border-red-700"
                             : "bg-gray-800 text-gray-300 border border-gray-700"
                         }`}
@@ -2560,28 +2564,16 @@ export default function RoomPage() {
               <div className="space-y-2">
                 <div className="text-xs text-gray-500 uppercase tracking-wider">Assigned Role</div>
                 <div className="flex items-center gap-2">
-                  {self.role === "SPYMASTER" ? (
-                    <span
-                      id="self-role"
-                      data-actual-role={self.role}
-                      className="px-2.5 py-1 rounded-sm text-xs font-bold uppercase tracking-wider border bg-amber-950/40 border-amber-700 text-amber-400"
-                    >
-                      SPYMASTER
-                    </span>
-                  ) : (
-                    <span
-                      id="self-role"
-                      data-actual-role={self.role}
-                      className="px-2.5 py-1 rounded-sm text-xs font-bold uppercase tracking-wider border bg-carbon-850 border-carbon-700 text-gray-300"
-                    >
-                      AGENT
-                    </span>
-                  )}
+                  <span
+                    id="self-role"
+                    data-actual-role={self.role}
+                    className="px-2.5 py-1 rounded-sm text-xs font-bold uppercase tracking-wider border bg-carbon-850 border-carbon-700 text-gray-300"
+                  >
+                    AGENT
+                  </span>
                 </div>
                 <p className="text-xs text-gray-400 font-mono pt-1">
-                  {self.role === "SPYMASTER"
-                    ? "Operation Commander. Holds exclusive lock-in authority on your team's final verdict."
-                    : "Field Operative. Protect your code word, extract opposing words, and uncover the mole in your ranks."}
+                  Field Operative. Protect your code word, extract opposing words, and uncover the mole in your ranks.
                 </p>
               </div>
 
@@ -2592,24 +2584,9 @@ export default function RoomPage() {
                     <span className="text-xs text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
                       <Lock className="w-3.5 h-3.5 text-classified-amber" /> Secret Code Word
                     </span>
-                    <div className="flex items-center gap-2">
-                      <span className="text-nano text-gray-500 uppercase">
-                        {isDecrypted ? "DECRYPTED" : "REDACTED"}
-                      </span>
-                      <button
-                        id="configure-spoof-word-btn"
-                        type="button"
-                        onClick={() => {
-                          setSpoofModalInput(spoofWord || "");
-                          setIsSpoofModalOpen(true);
-                        }}
-                        aria-label="Edit Code Word"
-                        title="Edit Code Word"
-                        className="text-gray-500 hover:text-classified-amber p-1 rounded transition-colors cursor-pointer min-w-[28px] min-h-[28px] flex items-center justify-center"
-                      >
-                        <Pencil className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
+                    <span className="text-nano text-gray-500 uppercase">
+                      {isDecrypted ? "DECRYPTED" : "REDACTED"}
+                    </span>
                   </div>
 
                   <div className="py-2 min-h-[40px] flex items-center">
@@ -2697,6 +2674,19 @@ export default function RoomPage() {
                       </>
                     )}
                   </button>
+
+                  <button
+                    id="configure-spoof-word-btn"
+                    type="button"
+                    onClick={() => {
+                      setSpoofModalInput(spoofWord || "");
+                      setIsSpoofModalOpen(true);
+                    }}
+                    className="w-full min-h-[44px] py-2 px-3 bg-carbon-900 hover:bg-carbon-850 active:scale-[0.99] border border-carbon-700/80 hover:border-carbon-600 rounded-sm text-xs font-mono font-bold uppercase tracking-wider text-gray-400 hover:text-classified-amber flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                  >
+                    <Shield className="w-3.5 h-3.5 text-classified-amber" />
+                    <span>CONFIGURE DECOY WORD</span>
+                  </button>
                 </div>
               </div>
             </div>
@@ -2745,7 +2735,8 @@ export default function RoomPage() {
                         OFFICIAL VERDICT LOCKED IN
                       </div>
                       <div className="text-sm">
-                        Submitted by Spymaster <strong>{gameState.teamVerdict.submittedByName}</strong>. Awaiting opponent command...
+                        Verified by <strong>{gameState.teamVerdict.submittedByName}</strong> and{" "}
+                        <strong>{gameState.teamVerdict.confirmedByNames?.filter((n) => n !== gameState.teamVerdict?.submittedByName).join(", ") || "Teammate"}</strong>. Awaiting opponent command...
                       </div>
                     </div>
                   </div>
@@ -2762,112 +2753,168 @@ export default function RoomPage() {
                 </div>
               ) : (
                 <>
-                  {/* Spymaster Lock-In Control vs Field Operative Status */}
-                  {self.role === "SPYMASTER" ? (
-                    <div className="p-4 bg-carbon-950 border border-classified-amber/50 rounded mb-6 space-y-4">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold uppercase tracking-wider text-classified-amber flex items-center gap-1.5">
-                          ★ SPYMASTER EXCLUSIVE LOCK-IN AUTHORITY
-                        </span>
-                        <span id="guesses-count" className="text-xs font-mono text-gray-400">
-                          SELECTED: <strong className="text-white">{spymasterGuesses.length}/{players.length}</strong>
-                        </span>
-                      </div>
-
-                      {/* Add Word Input */}
-                      <div className="flex gap-2">
-                        <input
-                          id="spymaster-word-input"
-                          type={isStreamSafe ? "password" : "text"}
-                          value={spymasterWordInput}
-                          onChange={(e) => setSpymasterWordInput(e.target.value)}
-                          onKeyDown={(e) => e.key === "Enter" && handleAddSpymasterGuess()}
-                          placeholder="Enter candidate code word..."
-                          className="flex-1 bg-carbon-900 border border-carbon-700 rounded px-3 py-2 text-base sm:text-xs text-white uppercase focus:outline-none focus:border-classified-amber min-h-[44px]"
-                        />
-                        <button
-                          id="add-guess-btn"
-                          onClick={() => handleAddSpymasterGuess()}
-                          className="bg-carbon-800 hover:bg-carbon-700 text-classified-amber border border-classified-amber/40 px-3 py-2 rounded text-xs font-bold uppercase tracking-wider min-h-[44px] active:scale-95 cursor-pointer"
-                        >
-                          + ADD GUESS
-                        </button>
-                      </div>
-
-                      {/* Draft Guesses Badges */}
-                      <div className="flex flex-wrap gap-2 min-h-[36px] p-2 bg-carbon-900/60 rounded border border-carbon-800" id="draft-guesses-container">
-                        {spymasterGuesses.length === 0 ? (
-                          <span className="text-xs text-gray-600 italic">No code words added to official verdict yet. Add words or click candidate words below.</span>
-                        ) : (
-                          spymasterGuesses.map((w) => (
-                            <span
-                              key={w}
-                              id={`draft-guess-${w.toLowerCase()}`}
-                              className="bg-carbon-800 border border-classified-amber/60 text-classified-amber text-xs px-2.5 py-1.5 rounded flex items-center gap-1.5 font-bold uppercase shadow min-h-[44px]"
-                            >
-                              <span>{isStreamSafe ? "••••••••" : w}</span>
-                              <button
-                                onClick={() => handleRemoveSpymasterGuess(w)}
-                                className="text-gray-400 hover:text-red-400 font-bold ml-1 cursor-pointer p-1 -m-1"
-                              >
-                                ×
-                              </button>
-                            </span>
-                          ))
-                        )}
-                      </div>
-
-                      {/* Tiebreaker Mole Indictment */}
-                      <div className="pt-2 border-t border-carbon-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                        <div className="flex items-center gap-2">
-                          <label htmlFor="mole-indictment-select" className="text-xs text-gray-400 uppercase">
-                            Mole Indictment (+2 Tiebreaker):
-                          </label>
-                          <select
-                            id="mole-indictment-select"
-                            value={moleIndictmentId}
-                            onChange={(e) => setMoleIndictmentId(e.target.value)}
-                            className="bg-carbon-900 border border-carbon-700 text-xs text-classified-amber rounded px-3 py-2 font-mono uppercase min-h-[44px]"
-                          >
-                            <option value="">-- No Indictment --</option>
-                            {players
-                              .filter((p) => p.id !== self.id)
-                              .map((p) => (
-                                <option key={p.id} value={p.id}>
-                                  {p.displayName} ({p.apparentTeam})
-                                </option>
-                              ))}
-                          </select>
+                  {/* Two-Member Consensus Pending Proposal Banner */}
+                  {gameState?.proposedVerdict && (
+                    <div
+                      id="pending-proposal-card"
+                      className="p-4 bg-carbon-900 border-2 border-classified-amber rounded mb-6 space-y-3 shadow-lg"
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-carbon-800 pb-2">
+                        <div className="flex items-center gap-2 text-classified-amber font-bold text-xs uppercase tracking-wider">
+                          <Users className="w-4 h-4" />
+                          <span>PENDING TEAM VERDICT PROPOSAL</span>
+                          <span className="bg-amber-950 border border-amber-800 px-2 py-0.5 rounded text-nano text-amber-300 font-bold">
+                            {gameState.proposedVerdict.confirmedBy.length}/2 CONFIRMED
+                          </span>
                         </div>
-
-                        <button
-                          id="lock-in-verdict-btn"
-                          disabled={isSubmittingVerdict || spymasterGuesses.length === 0}
-                          onClick={handleSubmitVerdict}
-                          className="bg-classified-crimson hover:bg-red-700 disabled:opacity-50 text-white font-bold px-5 py-2.5 rounded text-xs uppercase tracking-widest transition-colors shadow-lg border border-red-500 flex items-center justify-center gap-2 min-h-[44px] active:scale-95 cursor-pointer"
-                        >
-                          <Lock className="w-3.5 h-3.5" />
-                          {isSubmittingVerdict ? "TRANSMITTING VERDICT..." : "LOCK IN OFFICIAL VERDICT"}
-                        </button>
+                        <span className="text-nano text-gray-400">
+                          Proposed by <strong className="text-white">{gameState.proposedVerdict.proposedByName}</strong>
+                        </span>
                       </div>
 
-                      {verdictError && (
-                        <div className="text-xs text-red-400 bg-red-950/60 border border-red-800 p-2 rounded">
-                          {verdictError}
+                      <div className="space-y-1.5">
+                        <span className="text-micro text-gray-400 uppercase font-bold tracking-wider block">
+                          Proposed Code Words ({gameState.proposedVerdict.guesses.length}):
+                        </span>
+                        <div className="flex flex-wrap gap-1.5" id="proposed-guesses-list">
+                          {gameState.proposedVerdict.guesses.map((w, idx) => (
+                            <span
+                              key={idx}
+                              className="bg-carbon-950 border border-classified-amber/60 text-classified-amber px-2.5 py-1 rounded text-xs font-bold uppercase"
+                            >
+                              {isStreamSafe ? "••••••••" : w}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+
+                      {gameState.proposedVerdict.moleIndictmentName && (
+                        <div className="text-xs text-gray-300 flex items-center gap-2">
+                          <span className="text-micro text-gray-500 uppercase font-bold">Suspected Mole Indictment:</span>
+                          <span className="text-red-400 font-bold bg-red-950/60 border border-red-800 px-2 py-0.5 rounded text-micro">
+                            {gameState.proposedVerdict.moleIndictmentName}
+                          </span>
                         </div>
                       )}
-                    </div>
-                  ) : (
-                    <div
-                      id="awaiting-spymaster-notice"
-                      className="p-3.5 bg-carbon-950 border border-carbon-800 rounded text-xs text-gray-400 mb-6 flex items-center gap-3"
-                    >
-                      <Lock className="w-4 h-4 text-classified-amber shrink-0" />
-                      <span>
-                        <strong>AWAITING SPYMASTER LOCK-IN:</strong> Only your designated Spymaster can authorize the final verdict. Propose words below and vote on team suggestions to assist their assembly.
-                      </span>
+
+                      <div className="pt-2 border-t border-carbon-800 flex flex-col sm:flex-row items-center justify-between gap-3">
+                        <span className="text-nano text-gray-400">
+                          Confirmed by: <strong className="text-white">{gameState.proposedVerdict.confirmedByNames.join(", ")}</strong>
+                        </span>
+
+                        {gameState.proposedVerdict.confirmedBy.includes(self.id) ? (
+                          <span className="text-xs text-classified-terminal font-bold flex items-center gap-1.5">
+                            <Check className="w-4 h-4" /> YOU CONFIRMED — AWAITING TEAMMATE (1/2)
+                          </span>
+                        ) : (
+                          <button
+                            id="confirm-verdict-btn"
+                            disabled={isSubmittingVerdict}
+                            onClick={() => executeSubmitVerdict(true)}
+                            className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold px-5 py-2.5 rounded text-xs uppercase tracking-widest transition-colors shadow-lg border border-emerald-400 flex items-center justify-center gap-2 min-h-[44px] cursor-pointer active:scale-95"
+                          >
+                            <Lock className="w-3.5 h-3.5" />
+                            {isSubmittingVerdict ? "LOCKING IN..." : "CONFIRM & LOCK IN VERDICT (2/2)"}
+                          </button>
+                        )}
+                      </div>
                     </div>
                   )}
+
+                  {/* Collaborative Verdict Builder */}
+                  <div className="p-4 bg-carbon-950 border border-carbon-700/80 rounded mb-6 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold uppercase tracking-wider text-classified-amber flex items-center gap-1.5">
+                        <Users className="w-4 h-4" /> ASSEMBLE VERDICT SLATE (TWO-MEMBER CONSENSUS)
+                      </span>
+                      <span id="guesses-count" className="text-xs font-mono text-gray-400">
+                        SELECTED: <strong className="text-white">{verdictGuesses.length}/{players.length}</strong>
+                      </span>
+                    </div>
+
+                    {/* Add Word Input */}
+                    <div className="flex gap-2">
+                      <input
+                        id="verdict-word-input"
+                        type={isStreamSafe ? "password" : "text"}
+                        value={verdictWordInput}
+                        onChange={(e) => setVerdictWordInput(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && handleAddVerdictGuess()}
+                        placeholder="Enter candidate code word..."
+                        className="flex-1 bg-carbon-900 border border-carbon-700 rounded px-3 py-2 text-base sm:text-xs text-white uppercase focus:outline-none focus:border-classified-amber min-h-[44px]"
+                      />
+                      <button
+                        id="add-guess-btn"
+                        onClick={() => handleAddVerdictGuess()}
+                        className="bg-carbon-800 hover:bg-carbon-700 text-classified-amber border border-classified-amber/40 px-3 py-2 rounded text-xs font-bold uppercase tracking-wider min-h-[44px] active:scale-95 cursor-pointer"
+                      >
+                        + ADD GUESS
+                      </button>
+                    </div>
+
+                    {/* Draft Guesses Badges */}
+                    <div className="flex flex-wrap gap-2 min-h-[36px] p-2 bg-carbon-900/60 rounded border border-carbon-800" id="draft-guesses-container">
+                      {verdictGuesses.length === 0 ? (
+                        <span className="text-xs text-gray-600 italic">No code words added to your draft slate yet. Add words or click candidate words below.</span>
+                      ) : (
+                        verdictGuesses.map((w) => (
+                          <span
+                            key={w}
+                            id={`draft-guess-${w.toLowerCase()}`}
+                            className="bg-carbon-800 border border-classified-amber/60 text-classified-amber text-xs px-2.5 py-1.5 rounded flex items-center gap-1.5 font-bold uppercase shadow min-h-[44px]"
+                          >
+                            <span>{isStreamSafe ? "••••••••" : w}</span>
+                            <button
+                              onClick={() => handleRemoveVerdictGuess(w)}
+                              className="text-gray-400 hover:text-red-400 font-bold ml-1 cursor-pointer p-1 -m-1"
+                            >
+                              ×
+                            </button>
+                          </span>
+                        ))
+                      )}
+                    </div>
+
+                    {/* Tiebreaker Mole Indictment */}
+                    <div className="pt-2 border-t border-carbon-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="flex items-center gap-2">
+                        <label htmlFor="mole-indictment-select" className="text-xs text-gray-400 uppercase">
+                          Mole Indictment (+20% Bonus):
+                        </label>
+                        <select
+                          id="mole-indictment-select"
+                          value={moleIndictmentId}
+                          onChange={(e) => setMoleIndictmentId(e.target.value)}
+                          className="bg-carbon-900 border border-carbon-700 text-xs text-classified-amber rounded px-3 py-2 font-mono uppercase min-h-[44px]"
+                        >
+                          <option value="">-- No Indictment --</option>
+                          {players
+                            .filter((p) => p.id !== self.id)
+                            .map((p) => (
+                              <option key={p.id} value={p.id}>
+                                {p.displayName} ({p.apparentTeam})
+                              </option>
+                            ))}
+                        </select>
+                      </div>
+
+                      <button
+                        id="lock-in-verdict-btn"
+                        disabled={isSubmittingVerdict || verdictGuesses.length === 0}
+                        onClick={handleSubmitVerdict}
+                        className="bg-classified-crimson hover:bg-red-700 disabled:opacity-50 text-white font-bold px-5 py-2.5 rounded text-xs uppercase tracking-widest transition-colors shadow-lg border border-red-500 flex items-center justify-center gap-2 min-h-[44px] active:scale-95 cursor-pointer"
+                      >
+                        <Lock className="w-3.5 h-3.5" />
+                        {isSubmittingVerdict ? "TRANSMITTING PROPOSAL..." : "PROPOSE TEAM VERDICT"}
+                      </button>
+                    </div>
+
+                    {verdictError && (
+                      <div className="text-xs text-red-400 bg-red-950/60 border border-red-800 p-2 rounded">
+                        {verdictError}
+                      </div>
+                    )}
+                  </div>
 
                   {/* Collaborative Proposal Board */}
                   <div className="space-y-3">
@@ -2937,15 +2984,13 @@ export default function RoomPage() {
                                   ▲ <span id={`suggestion-votes-${s.id}`}>{s.votes.length}</span>
                                 </button>
 
-                                {self.role === "SPYMASTER" && (
-                                  <button
-                                    id={`adopt-word-btn-${s.id}`}
-                                    onClick={() => handleAddSpymasterGuess(s.word)}
-                                    className="bg-carbon-800 hover:bg-carbon-700 text-classified-amber border border-classified-amber/30 px-3 py-2 rounded text-micro uppercase font-bold min-h-[44px] flex items-center justify-center cursor-pointer"
-                                  >
-                                    + ADOPT
-                                  </button>
-                                )}
+                                <button
+                                  id={`adopt-word-btn-${s.id}`}
+                                  onClick={() => handleAddVerdictGuess(s.word)}
+                                  className="bg-carbon-800 hover:bg-carbon-700 text-classified-amber border border-classified-amber/30 px-3 py-2 rounded text-micro uppercase font-bold min-h-[44px] flex items-center justify-center cursor-pointer"
+                                >
+                                  + ADOPT
+                                </button>
                               </div>
                             </div>
                           );
@@ -3515,36 +3560,34 @@ export default function RoomPage() {
                     <span className="text-classified-amber font-bold">Secret Theme</span> uniting all genuine words. Cross-reference all claimed words against this theme to identify false leads and expose liars.
                   </li>
                   <li>
-                    <strong className="text-white">Universal Mole Verification:</strong> Any operative (Field Agent or Spymaster) can request clearance verification in 1-on-1 Direct Line chats with operatives on the opposing apparent team. If they are your faction&apos;s embedded double-agent, they can confirm their allegiance to establish an authenticated covert line and receive a permanent Confirmed Asset receipt.
+                    <strong className="text-white">Universal Mole Verification:</strong> Any operative can request clearance verification in 1-on-1 Direct Line chats with operatives on the opposing apparent team. If they are your faction&apos;s embedded double-agent, they can confirm their allegiance to establish an authenticated covert line and receive a permanent Confirmed Asset receipt.
                   </li>
                   <li>
-                    <strong className="text-white">Verdict Deliberation & Scoring (+1 / 0):</strong> In the final 60-minute Verdict phase, propose candidate words on the collaborative board and upvote nominations. Teams score{" "}
-                    <strong className="text-classified-terminal">+1 point</strong> for each correct word, and{" "}
-                    <strong>0 points</strong> for incorrect guesses (no penalty).
+                    <strong className="text-white">Verdict Deliberation & Scoring (20% Mechanics):</strong> In the final 60-minute Verdict phase, any teammate can propose the official verdict slate. Teams score based on enemy words extracted (0% to 100%), penalized by <strong className="text-classified-crimson">-20%</strong> for each missed own word, and awarded <strong className="text-classified-terminal">+20%</strong> for accurately indicting the enemy mole. Two teammates must agree to lock the verdict.
                   </li>
                 </ul>
               </div>
 
-              {/* SECTION 2: SPYMASTER DIRECTIVES (Collapsible // For Spymaster eyes) */}
+              {/* SECTION 2: CONSENSUS & VERDICT PROTOCOL (Collapsible) */}
               <div
-                id="spymaster-directives"
+                id="consensus-directives"
                 className="border border-amber-900/60 bg-carbon-950/60 rounded-lg overflow-hidden"
               >
                 <button
-                  id="spymaster-directives-toggle"
-                  onClick={() => setIsSpymasterExpanded(!isSpymasterExpanded)}
+                  id="consensus-directives-toggle"
+                  onClick={() => setIsConsensusExpanded(!isConsensusExpanded)}
                   className="w-full p-4 flex items-center justify-between hover:bg-carbon-850/60 transition-colors text-left min-h-[44px] cursor-pointer"
                 >
                   <div className="flex items-center gap-2 font-bold text-classified-amber uppercase tracking-wider text-sm">
-                    <Lock className="w-4 h-4" />
-                    <h4>Spymaster Directives</h4>
+                    <Users className="w-4 h-4" />
+                    <h4>Team Consensus & Verdict Protocol</h4>
                     <span className="text-nano bg-amber-950/80 text-classified-amber border border-amber-800 px-2 py-0.5 rounded font-bold ml-2">
-                      COMMAND CLEARANCE
+                      TWO-MEMBER CONSENSUS
                     </span>
                   </div>
                   <div className="flex items-center gap-1.5 text-xs text-gray-400">
-                    <span>{isSpymasterExpanded ? "COLLAPSE" : "EXPAND DIRECTIVES"}</span>
-                    {isSpymasterExpanded ? (
+                    <span>{isConsensusExpanded ? "COLLAPSE" : "EXPAND PROTOCOL"}</span>
+                    {isConsensusExpanded ? (
                       <ChevronUp className="w-4 h-4 text-classified-amber" />
                     ) : (
                       <ChevronDown className="w-4 h-4 text-classified-amber" />
@@ -3552,30 +3595,29 @@ export default function RoomPage() {
                   </div>
                 </button>
 
-                {isSpymasterExpanded && (
+                {isConsensusExpanded && (
                   <div
-                    id="spymaster-directives-content"
+                    id="consensus-directives-content"
                     className="p-4 border-t border-carbon-800 space-y-3 bg-carbon-900/50 animate-in fade-in duration-150"
                   >
                     <p className="text-gray-400 leading-relaxed">
-                      Exactly one Spymaster commands each faction. Spymasters hold exclusive verdict submission power and must orchestrate deep-cover espionage.
+                      Every operative holds full deliberation and submission agency. To prevent rogue agents or saboteurs from hijacking your mission, final verdicts strictly require a two-member quorum.
                     </p>
                     <ul className="space-y-2 list-disc list-inside text-gray-300 pl-1 leading-relaxed">
                       <li>
-                        <strong className="text-white">Exclusive Lock-In Authority:</strong> While field agents propose words, only the Spymaster can lock in the official team verdict. You must submit up to{" "}
-                        <strong>{players.length || 6}</strong> code words (including your own team&apos;s code words!).
+                        <strong className="text-white">Collaborative Proposals:</strong> Any teammate can assemble candidate words and propose the official team verdict slate.
                       </li>
                       <li>
-                        <strong className="text-white">Covert Mole Coordination:</strong> Your faction has an undercover Mole embedded inside the enemy team. Contact operatives via 1-on-1 Direct Line and click{" "}
-                        <span className="text-classified-amber font-bold">&quot;Verify Operative Credentials&quot;</span>. Once verified, you receive a permanent{" "}
-                        <span className="text-classified-terminal font-bold">Confirmed Asset Receipt</span>.
+                        <strong className="text-white">Two-Member Confirmation Quorum:</strong> A proposed slate is only locked into Central Command once a second teammate reviews and confirms it.
                       </li>
                       <li>
-                        <strong className="text-white">Intelligence Extraction:</strong> Coordinate covertly with your Mole via 1-on-1 DMs to extract the enemy team&apos;s secret code words and sow disinformation.
+                        <strong className="text-white">Enemy Word Extraction (0% to 100%):</strong> Your team earns points proportional to the enemy authentic code words you successfully deduce.
                       </li>
                       <li>
-                        <strong className="text-white">Tiebreaker Mole Indictment (+2 Points):</strong> If both teams achieve identical word scores, the tie is broken by the Mole Indictment. Select the operative you suspect is an enemy Mole. An accurate indictment awards{" "}
-                        <strong className="text-classified-terminal">+2 bonus points</strong>!
+                        <strong className="text-white">Internal Sabotage Penalty (-20% Flat):</strong> For every authentic code word from your own squad that was missed or replaced by a decoy, your rating drops by 20%. Protect your authentic words!
+                      </li>
+                      <li>
+                        <strong className="text-white">Mole Indictment Bonus (+20% Flat):</strong> Accurately identifying the enemy sleeper mole embedded in your squad awards an immediate +20% rating boost, neutralizing the damage of a sabotaged word.
                       </li>
                     </ul>
                   </div>
@@ -3623,13 +3665,13 @@ export default function RoomPage() {
                         <span className="text-classified-terminal font-bold">You win if and only if your ACTUAL faction wins!</span> Helping your apparent cover team win will result in your defeat.
                       </li>
                       <li>
-                        <strong className="text-white">Extract & Transmit Genuine Intel:</strong> Your primary operational focus is to discover your apparent team&apos;s genuine code words and secretly transmit them to your true teammates (and Spymaster) via private 1-on-1 Direct Line comms.
+                        <strong className="text-white">Extract & Transmit Genuine Intel:</strong> Your primary operational focus is to discover your apparent team&apos;s genuine code words and secretly transmit them to your true teammates via private 1-on-1 Direct Line comms.
                       </li>
                       <li>
                         <strong className="text-white">Disinformation & Sabotage:</strong> Blend in on your apparent team&apos;s Team Radio. Actively feed them convincing false intel and decoy candidate words to derail their deliberations, waste their guess slots, and protect your true team&apos;s secrets.
                       </li>
                       <li>
-                        <strong className="text-white">Cover Identity Masking & Screen-Share Safety:</strong> When your device is resting or idle, your screen displays an innocent Agent dossier identical to your apparent teammates. Only while pressing and holding &quot;Hold to Decrypt&quot; does your covert role and true allegiance flash into view. When your true Spymaster or teammates challenge your credentials via 1-on-1 DM, click{" "}
+                        <strong className="text-white">Cover Identity Masking & Screen-Share Safety:</strong> When your device is resting or idle, your screen displays an innocent Agent dossier identical to your apparent teammates. Only while pressing and holding &quot;Hold to Decrypt&quot; does your covert role and true allegiance flash into view. When your true teammates challenge your credentials via 1-on-1 DM, click{" "}
                         <span className="text-classified-terminal font-bold">&quot;Transmit Counter-Signature&quot;</span>. An emerald confirmation toast will appear and self-destruct after 3 seconds with zero persistent UI traces.
                       </li>
                       <li>
@@ -3731,24 +3773,24 @@ export default function RoomPage() {
               </div>
               <div>
                 <h3 id="verdict-modal-title" className="text-sm sm:text-base font-bold text-white uppercase tracking-wider">
-                  Two-Man Rule // Final Lock-In
+                  Two-Member Quorum // Propose Slate
                 </h3>
                 <span className="text-nano text-classified-amber uppercase tracking-widest font-bold">
-                  OFFICIAL SPYMASTER TRANSMISSION
+                  OFFICIAL VERDICT PROPOSAL
                 </span>
               </div>
             </div>
 
             <p className="text-xs text-gray-300 leading-relaxed">
-              You are about to transmit the official intelligence verdict for the{" "}
-              <strong className="text-white">{self.apparentTeam} FACTION</strong>. Once transmitted, your code word deductions and mole indictment are permanently locked into Central Command.
+              You are about to transmit a proposed intelligence verdict slate for the{" "}
+              <strong className="text-white">{self.apparentTeam} FACTION</strong>. At least one teammate must confirm this proposal to lock in Central Command.
             </p>
 
             {/* Verdict Summary Review */}
             <div className="bg-carbon-950 border border-carbon-800 rounded p-3 space-y-2 text-xs">
               <div className="flex justify-between items-center border-b border-carbon-800 pb-1.5">
-                <span className="text-gray-500 uppercase tracking-wider">Target Words ({spymasterGuesses.length}):</span>
-                <span className="text-classified-amber font-bold">{spymasterGuesses.join(", ")}</span>
+                <span className="text-gray-500 uppercase tracking-wider">Target Words ({verdictGuesses.length}):</span>
+                <span className="text-classified-amber font-bold">{verdictGuesses.join(", ")}</span>
               </div>
               <div className="flex justify-between items-center pt-0.5">
                 <span className="text-gray-500 uppercase tracking-wider">Indicted Mole:</span>
@@ -3770,11 +3812,11 @@ export default function RoomPage() {
               <button
                 id="confirm-verdict-btn"
                 type="button"
-                onClick={executeSubmitVerdict}
+                onClick={() => executeSubmitVerdict(false)}
                 className="min-h-[44px] px-4 py-2 bg-classified-amber text-black hover:bg-amber-400 font-mono font-bold uppercase text-xs tracking-wider rounded transition-colors flex items-center gap-1.5 cursor-pointer active:scale-95"
               >
                 <Lock className="w-4 h-4" />
-                AUTHENTICATE & TRANSMIT
+                TRANSMIT PROPOSAL
               </button>
             </div>
           </div>
@@ -3817,32 +3859,6 @@ export default function RoomPage() {
 
             {/* Role-Tailored Mission Briefing Body */}
             <div className="space-y-4 text-xs sm:text-sm text-gray-300 leading-relaxed bg-carbon-950 p-4 sm:p-5 rounded border border-carbon-800">
-              {self.role === "SPYMASTER" && (
-                <>
-                  <div className="flex items-center justify-between border-b border-carbon-800 pb-2 mb-3">
-                    <span className="text-classified-amber font-bold uppercase tracking-widest text-xs">
-                      ROLE: {self.apparentTeam} SPYMASTER (COMMANDER)
-                    </span>
-                    <span className="text-nano text-emerald-400 font-bold uppercase">VERDICT AUTHORITY</span>
-                  </div>
-                  <p>
-                    You are the designated <strong className="text-white">Spymaster</strong> for the{" "}
-                    <strong className="text-classified-amber">{self.apparentTeam} FACTION</strong>. You hold the
-                    exclusive authority to submit your faction&apos;s final verdict guesses and indict the enemy mole.
-                  </p>
-                  <ul className="list-disc pl-5 space-y-1.5 text-gray-400 pt-1">
-                    <li>
-                      <strong className="text-white">Deliberation:</strong> Communicate across Public wire and Team radio
-                      to extract opposing words from the enemy.
-                    </li>
-                    <li>
-                      <strong className="text-white">Counter-Espionage:</strong> An enemy mole is embedded in your team
-                      who may feed decoy words or false leads. Cross-examine your operatives.
-                    </li>
-                  </ul>
-                </>
-              )}
-
               {self.role === "MOLE" && (
                 <>
                   <div className="flex items-center justify-between border-b border-carbon-800 pb-2 mb-3">
@@ -3872,7 +3888,7 @@ export default function RoomPage() {
                     </li>
                     <li>
                       <strong className="text-white">Covert Contact:</strong> Establish covert contact with operatives
-                      on your true faction (Spymaster or Field Agents) using private 1-on-1 DMs to secretly transmit
+                      on your true faction using private 1-on-1 DMs to secretly transmit
                       intelligence and coordinate.
                     </li>
                     <li>
@@ -3902,8 +3918,8 @@ export default function RoomPage() {
                   </p>
                   <ul className="list-disc pl-5 space-y-1.5 text-gray-400 pt-1">
                     <li>
-                      <strong className="text-white">Deliberation Wire:</strong> Propose candidate code words on the team
-                      deliberation board to assist your Spymaster.
+                      <strong className="text-white">Deliberation Wire:</strong> Propose and confirm candidate code words on the team
+                      deliberation board to achieve two-member consensus.
                     </li>
                     <li>
                       <strong className="text-white">Vigilance:</strong> An enemy sleeper is embedded in your ranks.
@@ -3968,7 +3984,7 @@ export default function RoomPage() {
         </div>
       )}
 
-      {/* STATION CODE WORD CONFIGURATION MODAL */}
+      {/* TACTICAL DECOY WORD CONFIGURATION MODAL */}
       {isSpoofModalOpen && (
         <div
           id="spoof-word-modal"
@@ -3980,28 +3996,37 @@ export default function RoomPage() {
             if (e.target === e.currentTarget) setIsSpoofModalOpen(false);
           }}
         >
-          <div className="bg-carbon-900 border-2 border-carbon-700 rounded-lg max-w-md w-full p-5 sm:p-6 shadow-2xl font-mono space-y-4">
+          <div className="bg-carbon-900 border-2 border-classified-amber rounded-lg max-w-md w-full p-5 sm:p-6 shadow-2xl font-mono space-y-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-carbon-950 border border-carbon-800 rounded">
-                <Lock className="w-5 h-5 text-classified-amber" />
+              <div className="p-2 bg-amber-950/60 border border-amber-800 rounded">
+                <Shield className="w-5 h-5 text-classified-amber" />
               </div>
               <div>
                 <h3 id="spoof-modal-title" className="text-sm sm:text-base font-bold text-white uppercase tracking-wider">
-                  Station Code Word
+                  Tactical Decoy Word
                 </h3>
-                <span className="text-nano text-gray-500 uppercase tracking-widest font-bold">
-                  TERMINAL RECORD
+                <span className="text-nano text-classified-amber uppercase tracking-widest font-bold">
+                  SCREEN CAMOUFLAGE
                 </span>
               </div>
             </div>
 
-            <p className="text-xs text-gray-300 leading-relaxed">
-              Verify or update the operational code word assigned to this station.
-            </p>
+            {/* Critical Explanatory Callout */}
+            <div className="bg-carbon-950 border border-carbon-800 rounded p-3 space-y-2 text-xs">
+              <div className="flex items-center gap-1.5 text-classified-amber font-bold uppercase tracking-wider text-micro">
+                <Lock className="w-3.5 h-3.5" /> Authentic Code Word Unchanged
+              </div>
+              <p className="text-gray-300 leading-relaxed">
+                Configuring a decoy word <strong className="text-white">only changes the display</strong> on this station when holding to decrypt. Use this to protect your station against shoulder-surfing or to feed false leads.
+              </p>
+              <p className="text-gray-400 text-micro leading-relaxed border-t border-carbon-800 pt-2">
+                Your <strong className="text-white">original code word remains unchanged</strong> in Central Command&apos;s master codebook, and is what will be scored during the final Verdict &amp; Debrief phases.
+              </p>
+            </div>
 
             <div className="space-y-1.5">
-              <label htmlFor="spoof-word-input" className="block text-micro text-gray-400 uppercase tracking-wider font-bold">
-                Assigned Code Word:
+              <label htmlFor="spoof-word-input" className="block text-micro text-gray-300 uppercase tracking-wider font-bold">
+                Decoy Display Word:
               </label>
               <input
                 id="spoof-word-input"
@@ -4013,9 +4038,12 @@ export default function RoomPage() {
                 onKeyDown={(e) => {
                   if (e.key === "Enter") handleSaveSpoofWord();
                 }}
-                placeholder="ENTER CODE WORD"
+                placeholder="ENTER DECOY WORD (OR LEAVE BLANK)"
                 className="w-full bg-carbon-950 border border-carbon-700 focus:border-classified-amber text-white font-mono text-sm uppercase tracking-widest px-3 py-2.5 rounded outline-none"
               />
+              <span className="text-nano text-gray-500 block">
+                Clear this field or enter your authentic word to remove the decoy.
+              </span>
             </div>
 
             <div className="flex items-center justify-end gap-3 pt-2 border-t border-carbon-800">
@@ -4033,7 +4061,7 @@ export default function RoomPage() {
                 onClick={handleSaveSpoofWord}
                 className="min-h-[44px] px-4 py-2 bg-classified-amber text-black hover:bg-amber-400 font-mono font-bold uppercase text-xs tracking-wider rounded transition-colors cursor-pointer active:scale-95"
               >
-                CONFIRM CODE WORD
+                APPLY DECOY WORD
               </button>
             </div>
           </div>

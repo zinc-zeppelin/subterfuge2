@@ -390,24 +390,32 @@ export class SixPlayerHarness {
   }
 
   /**
-   * Spymaster adds a word directly to their official draft
+   * Operative adds a candidate word to their team verdict draft slate
    */
-  public async spymasterAddGuess(playerIndex: number, word: string): Promise<void> {
+  public async operativeAddVerdictGuess(playerIndex: number, word: string): Promise<void> {
     const op = this.sessions[playerIndex];
-    await op.page.fill("#spymaster-word-input", word);
+    await op.page.fill("#verdict-word-input", word);
     await op.page.click("#add-guess-btn");
   }
 
   /**
-   * Spymaster submits official verdict
+   * Operative proposes official team verdict
    */
-  public async spymasterSubmitVerdict(playerIndex: number): Promise<void> {
+  public async operativeProposeVerdict(playerIndex: number): Promise<void> {
     const op = this.sessions[playerIndex];
     await op.page.click("#lock-in-verdict-btn");
     const confirmBtn = op.page.locator("#confirm-verdict-btn");
     if (await confirmBtn.isVisible({ timeout: 1500 }).catch(() => false)) {
       await confirmBtn.click();
     }
+  }
+
+  /**
+   * Second teammate confirms the proposed verdict to lock official verdict (Two-Member Quorum)
+   */
+  public async teammateConfirmVerdict(playerIndex: number): Promise<void> {
+    const op = this.sessions[playerIndex];
+    await op.page.click("#confirm-verdict-btn");
   }
 
   /**
@@ -419,9 +427,9 @@ export class SixPlayerHarness {
   }
 
   /**
-   * Spymaster selects a suspected mole for indictment
+   * Operative selects a suspected mole for indictment
    */
-  public async spymasterSelectMoleIndictment(playerIndex: number, targetId: string): Promise<void> {
+  public async operativeSelectMoleIndictment(playerIndex: number, targetId: string): Promise<void> {
     const op = this.sessions[playerIndex];
     await op.page.selectOption("#mole-indictment-select", targetId);
   }

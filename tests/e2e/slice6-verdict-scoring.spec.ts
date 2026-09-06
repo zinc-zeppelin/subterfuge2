@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { SixPlayerHarness } from "../harness/multiplayer-harness";
 
-test.describe("Slice 6: Collaborative Verdict Board, Spymaster Lock-In & Scoring (+1 / 0)", () => {
+test.describe("Slice 6: Collaborative Verdict Board, Two-Member Consensus & Scoring", () => {
   let harness: SixPlayerHarness;
 
   test.beforeEach(async ({ browser }) => {
@@ -12,7 +12,7 @@ test.describe("Slice 6: Collaborative Verdict Board, Spymaster Lock-In & Scoring
     await harness.teardown();
   });
 
-  test("supports collaborative word proposals, enforces spymaster-only lock-in, scores +1 for correct and 0 for wrong, and transitions to DEBRIEF when both verdicts are locked", async ({
+  test("supports collaborative word proposals, enforces two-member consensus lock-in, scores with mission meter mechanics, and transitions to DEBRIEF when both verdicts are locked", async ({
     baseURL,
   }) => {
     const url = baseURL || "http://localhost:3000";
@@ -40,25 +40,22 @@ test.describe("Slice 6: Collaborative Verdict Board, Spymaster Lock-In & Scoring
       secretWords.push(w.toUpperCase().trim());
     }
 
-    // 3. Identify roles
-    let redSpymasterIdx = -1;
-    let redAgentIdx = -1;
-    let blueSpymasterIdx = -1;
-
+    // 3. Identify team operatives
+    const dossiers = [];
     for (let i = 0; i < 6; i++) {
       const dossier = await harness.getPlayerDossier(i);
-      if (dossier.apparentTeam === "RED" && dossier.role === "SPYMASTER") {
-        redSpymasterIdx = i;
-      } else if (dossier.apparentTeam === "RED" && dossier.role === "AGENT") {
-        redAgentIdx = i;
-      } else if (dossier.apparentTeam === "BLUE" && dossier.role === "SPYMASTER") {
-        blueSpymasterIdx = i;
-      }
+      dossiers.push({ idx: i, ...dossier });
     }
 
-    expect(redSpymasterIdx).toBeGreaterThanOrEqual(0);
-    expect(redAgentIdx).toBeGreaterThanOrEqual(0);
-    expect(blueSpymasterIdx).toBeGreaterThanOrEqual(0);
+    const redOps = dossiers.filter((d) => d.apparentTeam === "RED");
+    const blueOps = dossiers.filter((d) => d.apparentTeam === "BLUE");
+    expect(redOps.length).toBe(3);
+    expect(blueOps.length).toBe(3);
+
+    const redOp1 = redOps[0].idx;
+    const redOp2 = redOps[1].idx;
+    const blueOp1 = blueOps[0].idx;
+    const blueOp2 = blueOps[1].idx;
 
     // 4. Warp time to VERDICT phase
     await harness.warpTime("VERDICT");
@@ -70,52 +67,57 @@ test.describe("Slice 6: Collaborative Verdict Board, Spymaster Lock-In & Scoring
       await expect(op.page.locator("#verdict-board")).toBeVisible({ timeout: 15000 });
     }
 
-    // 5. Check Non-Spymaster vs Spymaster Permissions:
-    // Red Agent: CAN propose words, CANNOT lock in verdict
-    const agentPage = harness.sessions[redAgentIdx].page;
-    await expect(agentPage.locator("#awaiting-spymaster-notice")).toBeVisible();
-    await expect(agentPage.locator("#lock-in-verdict-btn")).not.toBeVisible();
+    // 5. Collaborative Proposal Board & Two-Member Quorum
+    // Red Op 1 proposes a candidate word
+    await harness.proposeWord(redOp1, "CANDIDATEWORD");
+    const op1Page = harness.sessions[redOp1].page;
+    const op2Page = harness.sessions[redOp2].page;
+    await expect(op1Page.locator("#suggestions-list")).toContainText("CANDIDATEWORD");
+    await expect(op2Page.locator("#suggestions-list")).toContainText("CANDIDATEWORD");
 
-    // Red Agent proposes a word
-    await harness.proposeWord(redAgentIdx, "CANDIDATEWORD");
-    await expect(agentPage.locator("#suggestions-list")).toContainText("CANDIDATEWORD");
+    // Both operatives have access to draft slate controls (Universal operative access)
+    await expect(op1Page.locator("#verdict-word-input")).toBeVisible();
+    await expect(op2Page.locator("#verdict-word-input")).toBeVisible();
 
-    // Red Spymaster sees the proposal and has lock-in authority
-    const redSpyPage = harness.sessions[redSpymasterIdx].page;
-    await expect(redSpyPage.locator("#suggestions-list")).toContainText("CANDIDATEWORD");
-    await expect(redSpyPage.locator("#lock-in-verdict-btn")).toBeVisible();
+    // 6. Red Op 1 drafts 6 guesses and proposes verdict slate
+    await harness.operativeAddVerdictGuess(redOp1, secretWords[0]);
+    await harness.operativeAddVerdictGuess(redOp1, secretWords[1]);
+    await harness.operativeAddVerdictGuess(redOp1, secretWords[2]);
+    await harness.operativeAddVerdictGuess(redOp1, "BOGUSONE");
+    await harness.operativeAddVerdictGuess(redOp1, "BOGUSTWO");
+    await harness.operativeAddVerdictGuess(redOp1, "BOGUSTHREE");
 
-    // 6. Red Spymaster populates 6 guesses (3 correct, 3 wrong)
-    // Add 3 correct words
-    await harness.spymasterAddGuess(redSpymasterIdx, secretWords[0]);
-    await harness.spymasterAddGuess(redSpymasterIdx, secretWords[1]);
-    await harness.spymasterAddGuess(redSpymasterIdx, secretWords[2]);
-    // Add 3 wrong words
-    await harness.spymasterAddGuess(redSpymasterIdx, "BOGUSONE");
-    await harness.spymasterAddGuess(redSpymasterIdx, "BOGUSTWO");
-    await harness.spymasterAddGuess(redSpymasterIdx, "BOGUSTHREE");
+    await expect(op1Page.locator("#guesses-count")).toContainText("6/6");
 
-    await expect(redSpyPage.locator("#guesses-count")).toContainText("6/6");
+    // Red Op 1 proposes team verdict (Propose Slate)
+    await harness.operativeProposeVerdict(redOp1);
 
-    // Red Spymaster locks in verdict
-    await harness.spymasterSubmitVerdict(redSpymasterIdx);
-    await harness.expectVerdictLocked(redSpymasterIdx);
-    // Red Agent also sees the verdict is locked in
-    await harness.expectVerdictLocked(redAgentIdx);
+    // Pending proposal card is visible to both teammates
+    await expect(op1Page.locator("#pending-proposal-card")).toBeVisible({ timeout: 5000 });
+    await expect(op2Page.locator("#pending-proposal-card")).toBeVisible({ timeout: 5000 });
+    await expect(op2Page.locator("#confirm-verdict-btn")).toBeVisible();
 
-    // 7. Blue Spymaster populates 6 guesses (5 correct, 1 wrong)
-    const blueSpyPage = harness.sessions[blueSpymasterIdx].page;
-    await expect(blueSpyPage.locator("#lock-in-verdict-btn")).toBeVisible();
+    // Red Op 2 confirms the proposal (Two-Member Quorum reached)
+    await harness.teammateConfirmVerdict(redOp2);
 
-    await harness.spymasterAddGuess(blueSpymasterIdx, secretWords[0]);
-    await harness.spymasterAddGuess(blueSpymasterIdx, secretWords[1]);
-    await harness.spymasterAddGuess(blueSpymasterIdx, secretWords[2]);
-    await harness.spymasterAddGuess(blueSpymasterIdx, secretWords[3]);
-    await harness.spymasterAddGuess(blueSpymasterIdx, secretWords[4]);
-    await harness.spymasterAddGuess(blueSpymasterIdx, "WRONGBLUE");
+    // Official verdict is now locked for both teammates
+    await harness.expectVerdictLocked(redOp1);
+    await harness.expectVerdictLocked(redOp2);
 
-    // Blue Spymaster locks in verdict
-    await harness.spymasterSubmitVerdict(blueSpymasterIdx);
+    // 7. Blue Team drafts and locks in verdict via Two-Member Consensus
+    const blueOp1Page = harness.sessions[blueOp1].page;
+    const blueOp2Page = harness.sessions[blueOp2].page;
+
+    await harness.operativeAddVerdictGuess(blueOp1, secretWords[0]);
+    await harness.operativeAddVerdictGuess(blueOp1, secretWords[1]);
+    await harness.operativeAddVerdictGuess(blueOp1, secretWords[2]);
+    await harness.operativeAddVerdictGuess(blueOp1, secretWords[3]);
+    await harness.operativeAddVerdictGuess(blueOp1, secretWords[4]);
+    await harness.operativeAddVerdictGuess(blueOp1, "WRONGBLUE");
+
+    await harness.operativeProposeVerdict(blueOp1);
+    await expect(blueOp2Page.locator("#pending-proposal-card")).toBeVisible({ timeout: 5000 });
+    await harness.teammateConfirmVerdict(blueOp2);
 
     // 8. Both verdicts are in -> Automatic transition to DEBRIEF phase
     for (const op of harness.sessions) {

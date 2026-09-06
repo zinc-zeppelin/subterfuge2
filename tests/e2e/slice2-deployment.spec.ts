@@ -47,15 +47,6 @@ test.describe("Slice 2: Operational Deployment & Thematic Assignment Engine", ()
     expect(redApparent.length).toBe(3);
     expect(blueApparent.length).toBe(3);
 
-    const redSpymasters = dossiers.filter(
-      (d) => d.apparentTeam === "RED" && d.actualTeam === "RED" && d.role === "SPYMASTER"
-    );
-    const blueSpymasters = dossiers.filter(
-      (d) => d.apparentTeam === "BLUE" && d.actualTeam === "BLUE" && d.role === "SPYMASTER"
-    );
-    expect(redSpymasters.length).toBe(1);
-    expect(blueSpymasters.length).toBe(1);
-
     const redMoles = dossiers.filter(
       (d) => d.apparentTeam === "RED" && d.actualTeam === "BLUE" && d.role === "MOLE"
     );
@@ -71,8 +62,8 @@ test.describe("Slice 2: Operational Deployment & Thematic Assignment Engine", ()
     const blueAgents = dossiers.filter(
       (d) => d.apparentTeam === "BLUE" && d.actualTeam === "BLUE" && d.role === "AGENT"
     );
-    expect(redAgents.length).toBe(1);
-    expect(blueAgents.length).toBe(1);
+    expect(redAgents.length).toBe(2);
+    expect(blueAgents.length).toBe(2);
 
     // 8. Verify Thematic Secret Word Assignment & Anti-Peeking Redaction
     const assignedWords = new Set<string>();

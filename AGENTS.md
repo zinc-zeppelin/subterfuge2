@@ -75,10 +75,9 @@ subterfuge2/
 Before modifying game logic, agents must understand the core rules:
 
 1. **Player Count & Balancing:**
-   - Rooms strictly require an **even number of operatives** ($N \in \{6, 8, 10, 12\}$).
-   - Evenly divided into apparent **Red Team** ($N/2$) and apparent **Blue Team** ($N/2$).
+   - Rooms support **6 to 12 operatives** ($N \in [6, 12]$), including odd numbers (7, 9, 11) with randomized 50/50 faction assignment (e.g. 4 Red vs 3 Blue).
 2. **Role Distribution:**
-   - **Spymaster:** Exactly 1 per team. Holds exclusive authority to submit final verdict guesses.
+   - All operatives are either **Field Agents** or **Embedded Moles** (the legacy Spymaster role has been completely excised to eliminate role asymmetry and heighten social deduction uncertainty).
    - **Embedded Mole:** Exactly 1 per team (2 per team at 12 players). Assigned apparent cover on Team A, but secret true loyalty to Team B.
    - **Field Agents:** Remaining operatives.
 3. **Thematic Codebook & Midpoint Intercept:**
@@ -86,13 +85,17 @@ Before modifying game logic, agents must understand the core rules:
    - Words are masked behind a **"Hold to Decrypt"** interaction to prevent shoulder-surfing.
    - At exactly 50% elapsed mission time, the system broadcasts the operational theme to all operatives.
 4. **Mole Verification Protocol (Screen-Share Safe):**
-   - Any operative (Spymaster or Field Agent) can issue a covert clearance challenge in 1-on-1 DMs to operatives wearing opposing-team cover (`apparentTeam !== activePeer.apparentTeam`). Same-faction challenges are prohibited.
+   - Any operative can issue a covert clearance challenge in 1-on-1 DMs to operatives wearing opposing-team cover (`apparentTeam !== activePeer.apparentTeam`). Same-faction challenges are prohibited.
    - Genuine moles see a 3-second self-destruct toast (`"Operative Verified"`) with zero persistent UI traces.
    - The challenging operative receives a persistent cryptographic receipt (`CONFIRMED ASSET`).
-5. **Verdict & Scoring:**
-   - Spymasters lock in guesses for all $N$ words and optionally indict an enemy mole.
-   - Correct Word: $+1$ PT. Wrong Word: $0$ PTS (no penalty).
-   - Correct Mole Indictment: $+2$ PTS (used as a decisive tiebreaker).
+5. **Verdict, Two-Member Consensus & Mission Meter Scoring:**
+   - Any operative can propose candidate words and draft the team's official verdict slate.
+   - A proposed slate is only locked into Central Command once a second teammate confirms it (**Two-Member Consensus Protocol**).
+   - **Mission Meter Scoring Engine:**
+     - **Enemy Word Extraction:** $0\%$ to $100\%$ based on the proportion of authentic enemy code words accurately deduced.
+     - **Internal Sabotage Penalty (-20% Flat):** Each authentic word from the team's own squad that was missed or replaced by a decoy deducts $20\%$ from the score.
+     - **Mole Indictment Bonus (+20% Flat):** Accurately naming the embedded enemy mole awards an immediate $+20\%$ boost.
+     - **Base Formula:** $\text{Score} = \max\left(0, \text{Extraction} - \text{Penalty}\right) + \text{Mole Bonus}$.
    - **Mole Win Condition:** Moles win if and only if their *actual* team wins.
 6. **Rematch Loop:**
    - In `DEBRIEF`, the Host can click **"Commence Rematch // Return to Lobby"** to reset the room state, shuffle roles and codebook, and keep all players connected in the lobby.

@@ -58,30 +58,35 @@ test.describe("Slice 7: Full 6-Player End-to-End Match, Debrief Reveal & Host Re
     expect(secretWords.length).toBe(6);
     expect(new Set(secretWords).size).toBe(6); // All 6 words are distinct
 
-    let redSpymasterIdx = -1;
-    let redAgentIdx = -1;
-    let blueSpymasterIdx = -1;
+    let redAgent1Idx = -1;
+    let redAgent2Idx = -1;
+    let blueAgent1Idx = -1;
+    let blueAgent2Idx = -1;
     let redCoverBlueMoleIdx = -1; // Apparent RED, Actual BLUE (the traitor inside Red)
     let blueCoverRedMoleIdx = -1; // Apparent BLUE, Actual RED (the traitor inside Blue)
 
     for (let i = 0; i < 6; i++) {
       const dossier = await harness.getPlayerDossier(i);
-      if (dossier.role === "SPYMASTER") {
-        if (dossier.apparentTeam === "RED") redSpymasterIdx = i;
-        else blueSpymasterIdx = i;
-      } else if (dossier.role === "MOLE") {
+      if (dossier.role === "MOLE") {
         if (dossier.apparentTeam === "RED") redCoverBlueMoleIdx = i;
         else blueCoverRedMoleIdx = i;
       } else if (dossier.role === "AGENT") {
-        if (dossier.apparentTeam === "RED") redAgentIdx = i;
+        if (dossier.apparentTeam === "RED") {
+          if (redAgent1Idx === -1) redAgent1Idx = i;
+          else redAgent2Idx = i;
+        } else {
+          if (blueAgent1Idx === -1) blueAgent1Idx = i;
+          else blueAgent2Idx = i;
+        }
       }
     }
 
-    expect(redSpymasterIdx).toBeGreaterThanOrEqual(0);
-    expect(blueSpymasterIdx).toBeGreaterThanOrEqual(0);
+    expect(redAgent1Idx).toBeGreaterThanOrEqual(0);
+    expect(redAgent2Idx).toBeGreaterThanOrEqual(0);
+    expect(blueAgent1Idx).toBeGreaterThanOrEqual(0);
+    expect(blueAgent2Idx).toBeGreaterThanOrEqual(0);
     expect(redCoverBlueMoleIdx).toBeGreaterThanOrEqual(0);
     expect(blueCoverRedMoleIdx).toBeGreaterThanOrEqual(0);
-    expect(redAgentIdx).toBeGreaterThanOrEqual(0);
 
     // Capture Screenshot 2: Decrypted Dossier
     await harness.sessions[redCoverBlueMoleIdx].page.screenshot({
@@ -101,14 +106,14 @@ test.describe("Slice 7: Full 6-Player End-to-End Match, Debrief Reveal & Host Re
     });
 
     // 4. Covert Mole Verification Handshake:
-    // Blue Spymaster challenges Red-cover Blue Mole (Blue's covert asset inside Red)
-    await harness.switchTab(blueSpymasterIdx, "DM");
-    await harness.selectDMPeer(blueSpymasterIdx, redCoverBlueMoleIdx);
-    await harness.initiateClearanceChallenge(blueSpymasterIdx);
+    // Blue Operative challenges Red-cover Blue Mole (Blue's covert asset inside Red)
+    await harness.switchTab(blueAgent1Idx, "DM");
+    await harness.selectDMPeer(blueAgent1Idx, redCoverBlueMoleIdx);
+    await harness.initiateClearanceChallenge(blueAgent1Idx);
 
     // Mole responds with counter-signature
     await harness.switchTab(redCoverBlueMoleIdx, "DM");
-    await harness.selectDMPeer(redCoverBlueMoleIdx, blueSpymasterIdx);
+    await harness.selectDMPeer(redCoverBlueMoleIdx, blueAgent1Idx);
     await expect(
       harness.sessions[redCoverBlueMoleIdx].page.locator("#clearance-challenge-modal")
     ).toBeVisible();
@@ -128,11 +133,11 @@ test.describe("Slice 7: Full 6-Player End-to-End Match, Debrief Reveal & Host Re
       path: path.join(screenshotsDir, "05-mole-self-destruct-toast.png"),
     });
 
-    // Blue Spymaster receives permanent asset receipt
-    await harness.expectConfirmedAssetReceipt(blueSpymasterIdx);
+    // Blue Operative receives permanent asset receipt
+    await harness.expectConfirmedAssetReceipt(blueAgent1Idx);
 
-    // Capture Screenshot 6: Confirmed Asset Receipt on Spymaster Screen
-    await harness.sessions[blueSpymasterIdx].page.screenshot({
+    // Capture Screenshot 6: Confirmed Asset Receipt on Operative Screen
+    await harness.sessions[blueAgent1Idx].page.screenshot({
       path: path.join(screenshotsDir, "06-handler-confirmed-receipt.png"),
     });
 
@@ -156,63 +161,69 @@ test.describe("Slice 7: Full 6-Player End-to-End Match, Debrief Reveal & Host Re
     }
 
     // Collaborative suggestion: Red Agent proposes a word
-    await harness.proposeWord(redAgentIdx, secretWords[0]);
+    await harness.proposeWord(redAgent1Idx, secretWords[blueAgent1Idx]);
     await expect(
-      harness.sessions[redSpymasterIdx].page.locator("#suggestions-list")
-    ).toContainText(secretWords[0]);
+      harness.sessions[redAgent2Idx].page.locator("#suggestions-list")
+    ).toContainText(secretWords[blueAgent1Idx]);
 
-    // Red Spymaster adds 3 guesses
-    await harness.spymasterAddGuess(redSpymasterIdx, secretWords[0]);
-    await harness.spymasterAddGuess(redSpymasterIdx, secretWords[1]);
-    await harness.spymasterAddGuess(redSpymasterIdx, secretWords[2]);
+    // Blue Operative adds guesses: 3 own words + 2 enemy words + 1 wrong word
+    await harness.operativeAddVerdictGuess(blueAgent1Idx, secretWords[blueAgent1Idx]);
+    await harness.operativeAddVerdictGuess(blueAgent1Idx, secretWords[blueAgent2Idx]);
+    await harness.operativeAddVerdictGuess(blueAgent1Idx, secretWords[blueCoverRedMoleIdx]);
+    await harness.operativeAddVerdictGuess(blueAgent1Idx, secretWords[redAgent1Idx]);
+    await harness.operativeAddVerdictGuess(blueAgent1Idx, secretWords[redAgent2Idx]);
+    await harness.operativeAddVerdictGuess(blueAgent1Idx, "WRONGBLUE1");
+
+    // Blue Operative proposes verdict slate
+    await harness.operativeProposeVerdict(blueAgent1Idx);
+
+    // Blue Teammate confirms verdict slate -> locks official Blue verdict
+    await harness.teammateConfirmVerdict(blueAgent2Idx);
+    await harness.expectVerdictLocked(blueAgent1Idx);
+
+    // Red Operative adds guesses: 3 own words + 2 enemy words + 1 wrong word
+    await harness.operativeAddVerdictGuess(redAgent1Idx, secretWords[redAgent1Idx]);
+    await harness.operativeAddVerdictGuess(redAgent1Idx, secretWords[redAgent2Idx]);
+    await harness.operativeAddVerdictGuess(redAgent1Idx, secretWords[redCoverBlueMoleIdx]);
+    await harness.operativeAddVerdictGuess(redAgent1Idx, secretWords[blueAgent1Idx]);
+    await harness.operativeAddVerdictGuess(redAgent1Idx, secretWords[blueAgent2Idx]);
+    await harness.operativeAddVerdictGuess(redAgent1Idx, "WRONGRED1");
 
     // Capture Screenshot 8: Collaborative Verdict Deliberation Board
-    await harness.sessions[redSpymasterIdx].page.screenshot({
+    await harness.sessions[redAgent1Idx].page.screenshot({
       path: path.join(screenshotsDir, "08-verdict-deliberation-board.png"),
     });
 
-    // Blue Spymaster submits 6 guesses: 3 correct, 3 wrong (Base Score = 3)
-    await harness.spymasterAddGuess(blueSpymasterIdx, secretWords[0]);
-    await harness.spymasterAddGuess(blueSpymasterIdx, secretWords[1]);
-    await harness.spymasterAddGuess(blueSpymasterIdx, secretWords[2]);
-    await harness.spymasterAddGuess(blueSpymasterIdx, "WRONGBLUE1");
-    await harness.spymasterAddGuess(blueSpymasterIdx, "WRONGBLUE2");
-    await harness.spymasterAddGuess(blueSpymasterIdx, "WRONGBLUE3");
-    await harness.spymasterSubmitVerdict(blueSpymasterIdx);
-    await harness.expectVerdictLocked(blueSpymasterIdx);
-
-    // Red Spymaster finishes guesses
-    await harness.spymasterAddGuess(redSpymasterIdx, "WRONGRED1");
-    await harness.spymasterAddGuess(redSpymasterIdx, "WRONGRED2");
-    await harness.spymasterAddGuess(redSpymasterIdx, "WRONGRED3");
-
-    // Red Spymaster indicts the traitor inside Red (redCoverBlueMoleIdx has role === "MOLE")
-    const redSpyPage = harness.sessions[redSpymasterIdx].page;
+    // Red Operative indicts the traitor inside Red (redCoverBlueMoleIdx has role === "MOLE")
+    const redOpPage = harness.sessions[redAgent1Idx].page;
     const moleCallsign = harness.sessions[redCoverBlueMoleIdx].callsign;
-    const moleOptionVal = await redSpyPage
+    const moleOptionVal = await redOpPage
       .locator("#mole-indictment-select option", { hasText: moleCallsign })
       .getAttribute("value");
     expect(moleOptionVal).toBeTruthy();
 
-    await harness.spymasterSelectMoleIndictment(redSpymasterIdx, moleOptionVal!);
-    await harness.spymasterSubmitVerdict(redSpymasterIdx);
+    await harness.operativeSelectMoleIndictment(redAgent1Idx, moleOptionVal!);
+    await harness.operativeProposeVerdict(redAgent1Idx);
+
+    // Red Teammate confirms -> locks official Red verdict, transitioning game to DEBRIEF
+    await harness.teammateConfirmVerdict(redAgent2Idx);
 
     // 7. DEBRIEF Phase Verification across all 6 operatives:
     await harness.expectDebriefViewOnAll();
 
-    // Verify Victory Banner announces Crimson Pact (Red) Victory due to 3 + 2 = 5 vs 3
+    // Verify Victory Banner announces Crimson Pact (Red) Victory due to 67% + 20% = 87% vs 67%
     for (const op of harness.sessions) {
       const banner = op.page.locator("#debrief-winner-banner");
       await expect(banner).toBeVisible();
       await expect(banner).toContainText("CRIMSON PACT VICTORY");
 
-      // Verify tiebreaker notice
+      // Verify tiebreaker notice (base 67% tied, +20% mole bonus decisive)
       await expect(op.page.locator("#tiebreaker-notice")).toBeVisible();
       await expect(op.page.locator("#tiebreaker-notice")).toContainText("TIEBREAKER RESOLVED");
 
-      // Verify scores: Red 5 PTS, Blue 3 PTS
-      await expect(op.page.locator("#red-final-score")).toContainText("5");
-      await expect(op.page.locator("#blue-final-score")).toContainText("3");
+      // Verify scores: Red 87%, Blue 67%
+      await expect(op.page.locator("#red-final-score")).toContainText("87%");
+      await expect(op.page.locator("#blue-final-score")).toContainText("67%");
 
       // Verify Master Codebook Declassification Matrix contains all 6 secret words
       const codebook = op.page.locator("#debrief-codebook");

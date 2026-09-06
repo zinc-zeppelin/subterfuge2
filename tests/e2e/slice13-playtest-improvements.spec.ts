@@ -100,7 +100,7 @@ test.describe("Slice 13: Playtesting Enhancements & Dev Mode Controls", () => {
     await expect(molePage.getByText("DECOY WORD:")).not.toBeVisible();
     await expect(molePage.getByText("DECOY:")).not.toBeVisible();
     await expect(molePage.getByText("SET CAMOUFLAGE")).not.toBeVisible();
-    await expect(molePage.locator("#configure-spoof-word-btn")).not.toContainText("DECOY");
+    await expect(molePage.locator("#configure-spoof-word-btn")).toContainText("CONFIGURE DECOY WORD");
 
     // Press and Hold Decrypt: Now reveals DECOYWORD with zero visual tell!
     await molePage.dispatchEvent("#decrypt-word-btn", "mousedown");

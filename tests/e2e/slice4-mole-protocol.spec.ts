@@ -66,12 +66,12 @@ test.describe("Slice 4: Covert Mole Protocol & Targeted Clearance Handshake", ()
     }
     expect(otherBlueIdx).toBeGreaterThanOrEqual(0);
 
-    // 3. SUCCESSFUL HANDSHAKE: Blue Field Agent (Non-Spymaster) challenges Red Mole on opposing cover
+    // 3. SUCCESSFUL HANDSHAKE: Blue Operative challenges Red Mole on opposing cover
     // Blue operative switches to DM tab and selects Red Mole
     await harness.switchTab(blueAgentIdx, "DM");
     await harness.selectDMPeer(blueAgentIdx, redMoleIdx);
 
-    // Initial state: Verify button is visible for non-spymaster Field Agent
+    // Initial state: Verify button is visible for operative
     const requesterPage = harness.sessions[blueAgentIdx].page;
     await expect(requesterPage.locator("#verify-credentials-btn")).toBeVisible();
 

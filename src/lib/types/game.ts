@@ -7,7 +7,7 @@ export type GamePhase =
 
 export type TeamColor = "RED" | "BLUE";
 
-export type PlayerRole = "SPYMASTER" | "AGENT" | "MOLE";
+export type PlayerRole = "AGENT" | "MOLE";
 
 export type ChannelType = "PUBLIC" | "TEAM_RED" | "TEAM_BLUE" | "DM";
 
@@ -81,6 +81,18 @@ export interface WordSuggestion {
   createdAt: string;
 }
 
+export interface ProposedVerdict {
+  team: TeamColor;
+  proposedBy: string;
+  proposedByName: string;
+  guesses: string[];
+  moleIndictmentId?: string;
+  moleIndictmentName?: string;
+  proposedAt: string;
+  confirmedBy: string[]; // IDs of players who agreed (minimum 2 to lock)
+  confirmedByNames: string[];
+}
+
 export interface TeamVerdict {
   team: TeamColor;
   submittedBy: string;
@@ -88,10 +100,15 @@ export interface TeamVerdict {
   guesses: string[];
   moleIndictmentId?: string;
   moleIndictmentName?: string;
-  score?: number;
+  score?: number; // Final Mission Rating % (0 - 120%)
+  enemyExtractionScore?: number; // % from enemy words
+  internalDeductionScore?: number; // % deducted for missed own words
+  moleBonusScore?: number; // % bonus from mole indictment (+20%)
   correctGuesses?: string[];
   tiebreakerBonus?: number;
   submittedAt: string;
+  confirmedBy?: string[];
+  confirmedByNames?: string[];
 }
 
 export interface Room {
@@ -110,7 +127,8 @@ export interface Room {
   players: Player[];
   codebook?: Record<string, string>; // playerId -> assignedWord
   suggestions?: Record<TeamColor, WordSuggestion[]>;
-  verdicts?: Record<TeamColor, TeamVerdict>;
+  proposedVerdicts?: Partial<Record<TeamColor, ProposedVerdict>>;
+  verdicts?: Partial<Record<TeamColor, TeamVerdict>>;
   winner?: TeamColor | "DRAW";
 }
 
@@ -148,7 +166,8 @@ export interface ClientGameState {
   }[];
   challengeStatuses?: Record<string, "PENDING" | "ACCEPTED" | "DENIED" | "DECLINED">; // targetId -> status
   teamSuggestions?: WordSuggestion[];
+  proposedVerdict?: ProposedVerdict;
   teamVerdict?: TeamVerdict;
-  allVerdicts?: Record<TeamColor, TeamVerdict>; // only in DEBRIEF
+  allVerdicts?: Partial<Record<TeamColor, TeamVerdict>>; // only in DEBRIEF
   codebook?: Record<string, string>; // only in DEBRIEF
 }
