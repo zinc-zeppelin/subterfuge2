@@ -332,6 +332,26 @@ export default function RoomPage() {
     }
   }, []);
 
+  const scrollToMessagesBottom = useCallback((smooth = false) => {
+    const doScroll = () => {
+      const listEl = document.getElementById("message-list");
+      if (listEl) {
+        if (smooth) {
+          listEl.scrollTo({ top: listEl.scrollHeight, behavior: "smooth" });
+        } else {
+          listEl.scrollTop = listEl.scrollHeight;
+        }
+      }
+      if (messagesEndRef.current) {
+        messagesEndRef.current.scrollIntoView({ behavior: smooth ? "smooth" : "auto", block: "nearest" });
+      }
+    };
+    requestAnimationFrame(doScroll);
+    setTimeout(doScroll, 50);
+    setTimeout(doScroll, 150);
+    setTimeout(doScroll, 300);
+  }, []);
+
   const handleOpenDMWithOperative = useCallback((peerId: string) => {
     setActiveTab("DM");
     setSelectedPeerId(peerId);
@@ -346,6 +366,13 @@ export default function RoomPage() {
         const inputEl = document.getElementById("message-input");
         if (inputEl) inputEl.scrollIntoView({ behavior: "smooth", block: "center" });
       }
+      const listEl = document.getElementById("message-list");
+      if (listEl) {
+        listEl.scrollTop = listEl.scrollHeight;
+      }
+      if (messagesEndRef.current) {
+        messagesEndRef.current.scrollIntoView({ behavior: "auto", block: "nearest" });
+      }
       const inputEl = document.getElementById("message-input");
       if (inputEl) {
         try {
@@ -357,7 +384,9 @@ export default function RoomPage() {
     };
 
     requestAnimationFrame(scrollToComms);
-    setTimeout(scrollToComms, 120);
+    setTimeout(scrollToComms, 60);
+    setTimeout(scrollToComms, 200);
+    setTimeout(scrollToComms, 450);
   }, []);
 
   const swRegistrationRef = useRef<ServiceWorkerRegistration | null>(null);
@@ -675,6 +704,11 @@ export default function RoomPage() {
     }
   }, [handleOpenDMWithOperative]);
 
+  // Auto-scroll comms message list to bottom on new transmissions or channel switch
+  useEffect(() => {
+    scrollToMessagesBottom(false);
+  }, [activeTab, selectedPeerId, messages.length, scrollToMessagesBottom]);
+
   useEffect(() => {
     const handleFocus = () => {
       document.title = "SUBTERFUGE // Intelligence Operative Portal";
@@ -928,6 +962,7 @@ export default function RoomPage() {
       if (res.ok) {
         setMessageInput("");
         await fetchMessages();
+        scrollToMessagesBottom(true);
       } else {
         const data = await res.json();
         setError(data.error || "Failed to transmit message");
@@ -1528,15 +1563,17 @@ export default function RoomPage() {
       )}
 
       {/* Top Intelligence Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-carbon-800 pb-4 mb-6">
-        <div>
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold font-mono text-white tracking-wider">
-              OPERATION: <span className="text-classified-amber">{room.code}</span>
+      <header className="border-b border-carbon-800 pb-3 mb-5 space-y-2.5">
+        {/* Row 1: Operation Code, Phase Stamp & Action Controls */}
+        <div className="flex flex-wrap items-center justify-between gap-2.5">
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-xl sm:text-2xl font-bold font-mono text-white tracking-wider flex items-center gap-1.5">
+              <span className="text-gray-500 text-xs sm:text-sm font-normal">OP:</span>
+              <span className="text-classified-amber">{room.code}</span>
             </h1>
             <span
               id="room-phase-badge"
-              className={`classified-stamp text-xs ${
+              className={`classified-stamp text-nano ${
                 isInfiltration
                   ? "text-classified-crimson border-classified-crimson animate-pulse"
                   : "text-classified-terminal border-classified-terminal"
@@ -1544,110 +1581,132 @@ export default function RoomPage() {
             >
               {room.phase}
             </span>
+            <span className="text-micro text-gray-400 font-mono hidden sm:inline-block">
+              {"// "}
+              <span className="text-gray-200 font-bold">{self.displayName}</span>
+              {self.isHost && " ★"}
+            </span>
           </div>
-          <p className="text-xs text-gray-500 font-mono mt-1">
-            ENCRYPTED LINK // OPERATIVE: <span className="text-gray-200 font-bold">{self.displayName}</span>
-            {self.isHost && " ★ (OPERATION COMMANDER)"}
-          </p>
+
+          {/* Action Tools Pill Strip */}
+          <div className="flex items-center gap-1.5 font-mono text-micro flex-wrap">
+            <button
+              id="field-manual-btn"
+              onClick={handleOpenManual}
+              className="min-h-[44px] px-3 py-1.5 bg-carbon-900 hover:bg-carbon-850 border border-classified-amber/50 text-classified-amber rounded text-micro font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer active:scale-95"
+            >
+              <BookOpen className="w-3.5 h-3.5" />
+              <span>MANUAL</span>
+            </button>
+
+            {room.phase !== "LOBBY" && notifPermission === "default" && (
+              <button
+                id="enable-notifications-btn"
+                onClick={handleRequestNotifPermission}
+                className="min-h-[44px] px-3 py-1.5 bg-carbon-900 hover:bg-carbon-850 border border-classified-amber text-classified-amber rounded text-micro font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer animate-pulse active:scale-95"
+                title="Enable comms alerts"
+              >
+                <Bell className="w-3.5 h-3.5" />
+                <span>ALERTS</span>
+              </button>
+            )}
+
+            {room.phase !== "LOBBY" && (
+              <button
+                id="toggle-stream-safe-btn"
+                onClick={() => setIsStreamSafe(!isStreamSafe)}
+                className={`min-h-[44px] px-3 py-1.5 bg-carbon-900 hover:bg-carbon-850 border rounded text-micro font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer active:scale-95 ${
+                  isStreamSafe
+                    ? "border-classified-crimson text-classified-crimson bg-red-950/30"
+                    : "border-carbon-700 text-muted hover:text-white"
+                }`}
+                title="Toggle Stream-Safe Redaction mode"
+              >
+                <ShieldAlert className="w-3.5 h-3.5" />
+                <span>{isStreamSafe ? "STREAM ON" : "STREAM OFF"}</span>
+              </button>
+            )}
+
+            {room.phase !== "LOBBY" && (
+              <button
+                id="copy-personal-link-btn"
+                onClick={async () => {
+                  if (typeof window === "undefined") return;
+                  const token = self.sessionToken || getSessionToken();
+                  const url = `${window.location.origin}/room/${room.code}?token=${token}`;
+                  try {
+                    await navigator.clipboard.writeText(url);
+                    setCopiedPersonalLink(true);
+                    setTimeout(() => setCopiedPersonalLink(false), 3000);
+                  } catch {
+                    // ignore
+                  }
+                }}
+                className="min-h-[44px] px-3 py-1.5 bg-carbon-900 hover:bg-carbon-850 border border-classified-terminal/60 text-classified-terminal rounded text-micro font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer active:scale-95"
+              >
+                {copiedPersonalLink ? (
+                  <>
+                    <Check className="w-3.5 h-3.5 text-classified-terminal" />
+                    <span>COPIED</span>
+                  </>
+                ) : (
+                  <>
+                    <KeyRound className="w-3.5 h-3.5 text-classified-terminal" />
+                    <span>RECOVERY</span>
+                  </>
+                )}
+              </button>
+            )}
+          </div>
         </div>
 
-        {/* Room Metrics & Operational Timer */}
-        <div className="flex flex-wrap items-center gap-4 sm:gap-6 font-mono text-xs text-gray-400">
-          {(isInfiltration || room.phase === "VERDICT") && (
-            <div
-              id="operational-timer-display"
-              className="bg-carbon-950 border border-classified-crimson/50 px-3 py-1.5 rounded flex items-center gap-2 text-classified-crimson shadow"
-            >
-              <Clock className="w-4 h-4 animate-spin text-classified-crimson" />
-              <div>
-                <span className="text-nano text-gray-500 uppercase tracking-wider block">
+        {/* Row 2: Operative callsign on mobile + Unified Telemetry Ribbon */}
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5 font-mono text-micro text-gray-400">
+          <div className="flex items-center gap-1.5 sm:hidden">
+            <span className="text-gray-500 text-nano uppercase">OPERATIVE:</span>
+            <span className="text-white font-bold">{self.displayName}</span>
+            {self.isHost && <span className="text-classified-amber font-bold">★ (CMD)</span>}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3 sm:gap-5 ml-auto sm:ml-0">
+            {(isInfiltration || room.phase === "VERDICT") && (
+              <div
+                id="operational-timer-display"
+                className="flex items-center gap-1.5 text-classified-crimson font-bold"
+              >
+                <Clock className="w-3.5 h-3.5 animate-spin text-classified-crimson shrink-0" />
+                <span className="text-gray-400 text-nano uppercase">
                   {room.phase === "VERDICT" ? "VERDICT DELIBERATION:" : "MISSION TIME REMAINING:"}
                 </span>
-                <span id="timer-countdown" className="text-sm font-bold tracking-widest text-white">
+                <span id="timer-countdown" className="text-white font-mono font-bold tracking-wider">
                   {timeLeft}
                 </span>
               </div>
+            )}
+
+            <div id="operatives-count-display" className="flex items-center gap-1 text-gray-400">
+              <Users className="w-3.5 h-3.5 text-gray-500 shrink-0" />
+              <span>OPERATIVES: <strong className="text-white">{players.length}</strong></span>
             </div>
-          )}
 
-          <div id="operatives-count-display" className="flex items-center gap-2">
-            <Users className="w-4 h-4 text-gray-500" />
-            <span>OPERATIVES: <strong className="text-white">{players.length}</strong></span>
+            <div className="hidden sm:flex items-center gap-1 text-gray-400">
+              <Clock className="w-3.5 h-3.5 text-gray-500 shrink-0" />
+              <span>DURATION: <strong className="text-white">{room.durationHours}H</strong></span>
+            </div>
+
+            {isInfiltration && midpointLeft && !room.declassifiedTheme && (
+              <div
+                id="midpoint-countdown-badge"
+                className="flex items-center gap-1 text-classified-amber"
+              >
+                <Radio className="w-3 h-3 text-classified-amber animate-pulse shrink-0" />
+                <span className="text-nano text-gray-400 uppercase">INTERCEPT:</span>
+                <span className="font-bold">T-{midpointLeft}</span>
+              </div>
+            )}
           </div>
-          <div className="flex items-center gap-2">
-            <Clock className="w-4 h-4 text-gray-500" />
-            <span>DURATION: <strong className="text-white">{room.durationHours}H</strong></span>
-          </div>
-
-          <button
-            id="field-manual-btn"
-            onClick={handleOpenManual}
-            className="min-h-[44px] px-3.5 py-2 bg-carbon-850 hover:bg-carbon-800 border border-classified-amber/60 text-classified-amber rounded text-xs font-mono font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
-          >
-            <BookOpen className="w-3.5 h-3.5" />
-            FIELD MANUAL
-          </button>
-
-          {room.phase !== "LOBBY" && notifPermission === "default" && (
-            <button
-              id="enable-notifications-btn"
-              onClick={handleRequestNotifPermission}
-              className="min-h-[44px] px-3.5 py-2 bg-carbon-850 hover:bg-carbon-800 border border-classified-amber text-classified-amber rounded text-xs font-mono font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer animate-pulse"
-              title="Enable transmission notifications when tab or app is in background"
-            >
-              <Bell className="w-3.5 h-3.5" />
-              <span>ENABLE COMMS ALERTS</span>
-            </button>
-          )}
-
-          {room.phase !== "LOBBY" && (
-            <button
-              id="toggle-stream-safe-btn"
-              onClick={() => setIsStreamSafe(!isStreamSafe)}
-              className={`min-h-[44px] px-3.5 py-2 bg-carbon-850 hover:bg-carbon-800 border rounded text-xs font-mono font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer ${
-                isStreamSafe
-                  ? "border-classified-crimson text-classified-crimson bg-red-950/40"
-                  : "border-carbon-700 text-muted hover:text-white"
-              }`}
-              title="Toggle Stream-Safe Redaction mode to prevent leaking secret candidate deductions while streaming"
-            >
-              <ShieldAlert className="w-3.5 h-3.5" />
-              <span>{isStreamSafe ? "STREAM SAFE: ON" : "STREAM SAFE: OFF"}</span>
-            </button>
-          )}
-
-          {room.phase !== "LOBBY" && (
-            <button
-              id="copy-personal-link-btn"
-              onClick={async () => {
-                if (typeof window === "undefined") return;
-                const token = self.sessionToken || getSessionToken();
-                const url = `${window.location.origin}/room/${room.code}?token=${token}`;
-                try {
-                  await navigator.clipboard.writeText(url);
-                  setCopiedPersonalLink(true);
-                  setTimeout(() => setCopiedPersonalLink(false), 3000);
-                } catch {
-                  // ignore
-                }
-              }}
-              className="min-h-[44px] px-3.5 py-2 bg-carbon-850 hover:bg-carbon-800 border border-classified-terminal/60 text-classified-terminal rounded text-xs font-mono font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
-            >
-              {copiedPersonalLink ? (
-                <>
-                  <Check className="w-3.5 h-3.5 text-classified-terminal" />
-                  <span>LINK COPIED!</span>
-                </>
-              ) : (
-                <>
-                  <KeyRound className="w-3.5 h-3.5 text-classified-terminal" />
-                  <span>RECOVERY LINK</span>
-                </>
-              )}
-            </button>
-          )}
         </div>
-      </div>
+      </header>
 
       {/* Global Midpoint Theme Declassification Broadcast Banner */}
       {room.declassifiedTheme && room.phase !== "DEBRIEF" && (
@@ -1679,22 +1738,6 @@ export default function RoomPage() {
             <div className="font-bold text-white uppercase tracking-wider">CROSS-REFERENCE CODE WORDS</div>
             <div className="text-nano text-gray-400">UNMATCHED WORDS MAY INDICATE MOLE DECEPTION</div>
           </div>
-        </div>
-      )}
-
-      {/* Midpoint Countdown Schedule Notice */}
-      {isInfiltration && midpointLeft && !room.declassifiedTheme && (
-        <div
-          id="midpoint-countdown-badge"
-          className="mb-6 px-4 py-2 bg-carbon-900 border border-carbon-800 rounded font-mono text-xs text-gray-400 flex items-center justify-between"
-        >
-          <div className="flex items-center gap-2">
-            <Clock className="w-3.5 h-3.5 text-classified-amber" />
-            <span className="uppercase tracking-wider">AUTOMATED INTELLIGENCE INTERCEPT SCHEDULED:</span>
-          </div>
-          <span className="text-classified-amber font-bold tracking-wider">
-            T-MINUS {midpointLeft}
-          </span>
         </div>
       )}
 
@@ -2364,33 +2407,8 @@ export default function RoomPage() {
       ) : (
         /* PHASE 2: INFILTRATION VIEW (CLASSIFIED DOSSIER + INTELLIGENCE COMMS) */
         <div className="space-y-6">
-          {/* Mobile Quick-Jump Anchor Bar */}
-          <div className="flex md:hidden items-center justify-between gap-1 p-1 bg-carbon-900 border border-carbon-800 rounded font-mono text-micro uppercase tracking-wider sticky top-16 z-20 shadow-md backdrop-blur">
-            <button
-              type="button"
-              onClick={() => document.getElementById("top-secret-dossier")?.scrollIntoView({ behavior: "smooth" })}
-              className="flex-1 py-2 px-1 text-center bg-carbon-850 hover:bg-carbon-800 text-gray-300 hover:text-white rounded border border-carbon-700/60 min-h-[44px] flex items-center justify-center cursor-pointer"
-            >
-              [DOSSIER]
-            </button>
-            <button
-              type="button"
-              onClick={() => document.getElementById("comms-panel")?.scrollIntoView({ behavior: "smooth" })}
-              className="flex-1 py-2 px-1 text-center bg-carbon-850 hover:bg-carbon-800 text-classified-amber rounded border border-classified-amber/40 min-h-[44px] flex items-center justify-center cursor-pointer font-bold"
-            >
-              [COMMS]
-            </button>
-            <button
-              type="button"
-              onClick={() => document.getElementById("roster-panel")?.scrollIntoView({ behavior: "smooth" })}
-              className="flex-1 py-2 px-1 text-center bg-carbon-850 hover:bg-carbon-800 text-gray-300 hover:text-white rounded border border-carbon-700/60 min-h-[44px] flex items-center justify-center cursor-pointer"
-            >
-              [ROSTER]
-            </button>
-          </div>
-
           {/* Top Secret Operative Dossier Card */}
-          <div id="top-secret-dossier" className="bg-carbon-900 border border-carbon-700 rounded-lg p-6 shadow-2xl relative overflow-hidden scroll-mt-24">
+          <div id="top-secret-dossier" className="bg-carbon-900 border border-carbon-700 rounded-lg p-5 sm:p-6 shadow-xl relative overflow-hidden">
             <div className="absolute top-0 right-0 transform translate-x-4 -translate-y-2">
               <span className="classified-stamp text-xs text-classified-crimson border-classified-crimson opacity-80">
                 TOP SECRET // EYES ONLY
@@ -2411,10 +2429,10 @@ export default function RoomPage() {
                 <div className="flex items-center gap-2">
                   <span
                     id="self-apparent-team"
-                    className={`px-3 py-1 rounded text-xs font-bold uppercase tracking-wider border ${
+                    className={`px-2.5 py-1 rounded-sm text-xs font-bold uppercase tracking-widest border ${
                       self.apparentTeam === "RED"
-                        ? "bg-red-950/60 border-red-700 text-red-400"
-                        : "bg-blue-950/60 border-blue-700 text-blue-400"
+                        ? "bg-red-950/40 border-red-800 text-red-400"
+                        : "bg-blue-950/40 border-blue-800 text-blue-400"
                     }`}
                   >
                     {self.apparentTeam} TEAM
@@ -2434,7 +2452,7 @@ export default function RoomPage() {
                         }`}
                       >
                         <span>LOYAL TO {self.actualTeam} TEAM</span>
-                        <span className="text-nano bg-red-950 text-red-400 border border-red-800 px-1 py-0.5 rounded font-bold animate-pulse">
+                        <span className="text-nano bg-red-950 text-red-400 border border-red-800 px-1.5 py-0.5 rounded-sm font-bold animate-pulse">
                           SLEEPER
                         </span>
                       </div>
@@ -2473,7 +2491,7 @@ export default function RoomPage() {
                       <span
                         id="self-role"
                         data-actual-role={self.role}
-                        className="px-3 py-1 rounded text-xs font-bold uppercase tracking-wider border bg-purple-950/60 border-purple-600 text-purple-400"
+                        className="px-2.5 py-1 rounded-sm text-xs font-bold uppercase tracking-wider border bg-purple-950/40 border-purple-700 text-purple-400"
                       >
                         MOLE
                       </span>
@@ -2481,7 +2499,7 @@ export default function RoomPage() {
                       <span
                         id="self-role"
                         data-actual-role={self.role}
-                        className="px-3 py-1 rounded text-xs font-bold uppercase tracking-wider border bg-carbon-800 border-carbon-600 text-gray-300"
+                        className="px-2.5 py-1 rounded-sm text-xs font-bold uppercase tracking-wider border bg-carbon-850 border-carbon-700 text-gray-300"
                       >
                         AGENT
                       </span>
@@ -2490,10 +2508,10 @@ export default function RoomPage() {
                     <span
                       id="self-role"
                       data-actual-role={self.role}
-                      className={`px-3 py-1 rounded text-xs font-bold uppercase tracking-wider border ${
+                      className={`px-2.5 py-1 rounded-sm text-xs font-bold uppercase tracking-wider border ${
                         self.role === "SPYMASTER"
-                          ? "bg-amber-950/60 border-amber-600 text-amber-400"
-                          : "bg-carbon-800 border-carbon-600 text-gray-300"
+                          ? "bg-amber-950/40 border-amber-700 text-amber-400"
+                          : "bg-carbon-850 border-carbon-700 text-gray-300"
                       }`}
                     >
                       {self.role}
@@ -2513,7 +2531,7 @@ export default function RoomPage() {
               </div>
 
               {/* Secret Code Word & Hold-to-Decrypt Anti-Peeking */}
-              <div className="space-y-2 bg-carbon-950 p-4 rounded border border-carbon-800 flex flex-col justify-between">
+              <div className="space-y-2 bg-carbon-950/70 p-3.5 sm:p-4 rounded-sm border border-carbon-800 flex flex-col justify-between">
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-xs text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
@@ -2524,11 +2542,11 @@ export default function RoomPage() {
                     </span>
                   </div>
 
-                  <div className="py-2">
+                  <div className="py-2 min-h-[40px] flex items-center">
                     {isDecrypted ? (
                       <span
                         id="self-assigned-word"
-                        className="text-xl font-bold font-mono tracking-widest text-classified-amber bg-amber-950/30 px-3 py-1 rounded border border-amber-700/50 inline-block uppercase"
+                        className="text-xl font-bold font-mono tracking-widest text-classified-amber bg-amber-950/30 px-3 py-1 rounded-sm border border-amber-700/50 inline-block uppercase"
                       >
                         {isStreamSafe ? "•••••••• (STREAM-SAFE)" : self.assignedWord}
                       </span>
@@ -2568,7 +2586,6 @@ export default function RoomPage() {
                     e.preventDefault();
                     handleDecryptEnd();
                   }}
-                  onPointerLeave={() => handleDecryptEnd()}
                   onPointerCancel={() => handleDecryptEnd()}
                   onTouchStart={(e) => {
                     e.preventDefault();
@@ -2594,7 +2611,7 @@ export default function RoomPage() {
                     userSelect: "none",
                     touchAction: "manipulation",
                   }}
-                  className={`w-full min-h-[44px] py-2.5 px-3 bg-carbon-800 hover:bg-carbon-700 active:bg-classified-amber active:text-black border border-carbon-600 rounded text-xs font-mono font-bold uppercase tracking-wider text-gray-300 flex items-center justify-center gap-2 transition-colors select-none cursor-pointer ${
+                  className={`w-full min-h-[44px] py-2.5 px-3 bg-carbon-850 hover:bg-carbon-800 active:bg-classified-amber active:text-black border border-carbon-700 rounded-sm text-xs font-mono font-bold uppercase tracking-wider text-gray-200 flex items-center justify-center gap-2 transition-colors select-none cursor-pointer ${
                     isDecrypted ? "hold-progress-active" : ""
                   }`}
                 >
@@ -2920,20 +2937,21 @@ export default function RoomPage() {
               )}
 
               {/* Channel Tabs */}
-              <div className="flex border-b border-carbon-800 bg-carbon-950/60 p-2 gap-2 font-mono text-xs">
+              <div className="flex border-b border-carbon-800 bg-carbon-950/60 p-1.5 gap-1.5 font-mono text-xs">
                 <button
                   id="tab-public"
                   onClick={() => {
                     setActiveTab("PUBLIC");
                     setLastReadTimestamps((prev) => ({ ...prev, PUBLIC: Date.now() }));
                   }}
-                  className={`flex-1 py-2 px-3 rounded font-bold uppercase tracking-wider transition-colors flex items-center justify-center gap-1.5 min-h-[44px] cursor-pointer ${
+                  className={`flex-1 py-2 px-2 rounded font-bold uppercase tracking-wider transition-colors flex items-center justify-center gap-1.5 min-h-[44px] cursor-pointer whitespace-nowrap text-micro sm:text-xs ${
                     activeTab === "PUBLIC"
                       ? "bg-carbon-800 text-white border border-carbon-700 shadow"
                       : "text-gray-400 hover:text-white"
                   }`}
                 >
-                  <Radio className="w-3.5 h-3.5 text-gray-400" /> [FREQ 01 // PUBLIC WIRE]
+                  <Radio className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                  <span className="truncate">PUBLIC</span>
                   {messages.some(
                     (m) =>
                       m.channelType === "PUBLIC" &&
@@ -2943,7 +2961,7 @@ export default function RoomPage() {
                   ) && (
                     <span
                       id="unread-badge-public"
-                      className="w-2 h-2 rounded-full bg-classified-amber animate-pulse shrink-0 ml-1"
+                      className="w-2 h-2 rounded-full bg-classified-amber animate-pulse shrink-0 ml-0.5"
                       title="Unread transmissions"
                     />
                   )}
@@ -2954,7 +2972,7 @@ export default function RoomPage() {
                     setActiveTab("TEAM");
                     setLastReadTimestamps((prev) => ({ ...prev, TEAM: Date.now() }));
                   }}
-                  className={`flex-1 py-2 px-3 rounded font-bold uppercase tracking-wider transition-colors flex items-center justify-center gap-1.5 min-h-[44px] cursor-pointer ${
+                  className={`flex-1 py-2 px-2 rounded font-bold uppercase tracking-wider transition-colors flex items-center justify-center gap-1.5 min-h-[44px] cursor-pointer whitespace-nowrap text-micro sm:text-xs ${
                     activeTab === "TEAM"
                       ? self.apparentTeam === "RED"
                         ? "bg-red-950/80 text-red-300 border border-red-800 shadow"
@@ -2962,7 +2980,8 @@ export default function RoomPage() {
                       : "text-gray-400 hover:text-white"
                   }`}
                 >
-                  <Flag className="w-3.5 h-3.5" /> [FREQ 02 // {self.apparentTeam} RADIO]
+                  <Flag className="w-3.5 h-3.5 shrink-0" />
+                  <span className="truncate">{self.apparentTeam} RADIO</span>
                   {messages.some(
                     (m) =>
                       m.channelType.startsWith("TEAM") &&
@@ -2972,7 +2991,7 @@ export default function RoomPage() {
                   ) && (
                     <span
                       id="unread-badge-team"
-                      className="w-2 h-2 rounded-full bg-classified-amber animate-pulse shrink-0 ml-1"
+                      className="w-2 h-2 rounded-full bg-classified-amber animate-pulse shrink-0 ml-0.5"
                       title="Unread transmissions"
                     />
                   )}
@@ -2983,13 +3002,14 @@ export default function RoomPage() {
                     setActiveTab("DM");
                     setLastReadTimestamps((prev) => ({ ...prev, DM: Date.now() }));
                   }}
-                  className={`flex-1 py-2 px-3 rounded font-bold uppercase tracking-wider transition-colors flex items-center justify-center gap-1.5 min-h-[44px] cursor-pointer ${
+                  className={`flex-1 py-2 px-2 rounded font-bold uppercase tracking-wider transition-colors flex items-center justify-center gap-1.5 min-h-[44px] cursor-pointer whitespace-nowrap text-micro sm:text-xs ${
                     activeTab === "DM"
                       ? "bg-classified-amber/20 text-classified-amber border border-classified-amber/50 shadow"
                       : "text-gray-400 hover:text-white"
                   }`}
                 >
-                  <MessageSquare className="w-3.5 h-3.5" /> [FREQ 03 // DIRECT LINE]
+                  <MessageSquare className="w-3.5 h-3.5 shrink-0" />
+                  <span className="truncate">DIRECT LINE</span>
                   {messages.some(
                     (m) =>
                       m.channelType === "DM" &&
@@ -3000,7 +3020,7 @@ export default function RoomPage() {
                   ) && (
                     <span
                       id="unread-badge-dm"
-                      className="w-2 h-2 rounded-full bg-classified-amber animate-pulse shrink-0 ml-1"
+                      className="w-2 h-2 rounded-full bg-classified-amber animate-pulse shrink-0 ml-0.5"
                       title="Unread direct transmissions"
                     />
                   )}
@@ -3161,33 +3181,36 @@ export default function RoomPage() {
                 ) : (
                   currentTabMessages.map((msg) => {
                     const isSelf = msg.senderId === self.id;
+                    const isRed = msg.senderApparentTeam === "RED";
                     return (
                       <div
                         key={msg.id}
                         id={`msg-${msg.id}`}
-                        className={`p-3 rounded border ${
+                        className={`p-2.5 sm:p-3 rounded-sm border-t border-r border-b transition-colors ${
                           isSelf
-                            ? "bg-carbon-850 border-carbon-700 ml-8"
-                            : msg.senderApparentTeam === "RED"
-                            ? "bg-red-950/20 border-red-900/40 mr-8"
-                            : "bg-blue-950/20 border-blue-900/40 mr-8"
+                            ? "bg-carbon-900/90 border-carbon-800 border-l-2 border-l-classified-amber"
+                            : isRed
+                            ? "bg-carbon-900/60 border-carbon-800/80 border-l-2 border-l-red-500"
+                            : "bg-carbon-900/60 border-carbon-800/80 border-l-2 border-l-blue-500"
                         }`}
                       >
-                        <div className="flex items-center justify-between text-nano text-gray-500 mb-1">
-                          <span className="font-bold flex items-center gap-1.5">
+                        <div className="flex items-baseline justify-between text-nano text-gray-500 mb-1 gap-2 font-mono">
+                          <span className="font-bold flex items-center gap-1.5 min-w-0">
                             <span
-                              className={
-                                msg.senderApparentTeam === "RED"
-                              ? "text-red-400"
-                              : "text-blue-400"
-                              }
+                              className={`shrink-0 ${
+                                isRed ? "text-red-400" : "text-blue-400"
+                              }`}
                             >
                               [{msg.senderApparentTeam}]
                             </span>
-                            <span className="text-white">{msg.senderName}</span>
-                            {isSelf && <span className="text-classified-amber">(YOU)</span>}
+                            <span className="text-gray-200 truncate">{msg.senderName}</span>
+                            {isSelf && (
+                              <span className="text-classified-amber text-nano px-1 py-0.5 border border-amber-500/40 rounded-sm shrink-0 font-bold">
+                                YOU
+                              </span>
+                            )}
                           </span>
-                          <span>
+                          <span className="shrink-0 text-gray-500 font-mono">
                             {new Date(msg.createdAt).toLocaleTimeString([], {
                               hour: "2-digit",
                               minute: "2-digit",
@@ -3195,7 +3218,7 @@ export default function RoomPage() {
                             })}
                           </span>
                         </div>
-                        <p className="text-gray-200 text-xs break-words">{msg.content}</p>
+                        <p className="text-gray-200 text-xs break-words leading-relaxed pl-0.5 font-mono">{msg.content}</p>
                       </div>
                     );
                   })
@@ -3221,13 +3244,13 @@ export default function RoomPage() {
                       : "Broadcast to Public Wire..."
                   }
                   maxLength={500}
-                  className="flex-1 bg-carbon-900 border border-carbon-700 rounded px-3 py-2 text-base sm:text-xs font-mono text-white placeholder-gray-600 focus:outline-none focus:border-classified-amber min-h-[44px]"
+                  className="flex-1 bg-carbon-900 border border-carbon-700 rounded-sm px-3 py-2 text-base sm:text-xs font-mono text-white placeholder-gray-600 focus:outline-none focus:border-classified-amber min-h-[44px]"
                 />
                 <button
                   id="send-message-btn"
                   type="submit"
                   disabled={!messageInput.trim() || isSendingMessage}
-                  className="px-4 py-2 bg-classified-amber hover:bg-amber-600 disabled:opacity-30 text-black font-mono font-bold text-xs uppercase tracking-wider rounded flex items-center gap-1.5 transition-colors min-h-[44px] active:scale-95 cursor-pointer shrink-0"
+                  className="px-4 py-2 bg-classified-amber hover:bg-amber-600 disabled:opacity-30 text-black font-mono font-bold text-xs uppercase tracking-wider rounded-sm flex items-center gap-1.5 transition-colors min-h-[44px] active:scale-95 cursor-pointer shrink-0"
                 >
                   <Send className="w-3.5 h-3.5" />
                   {isSendingMessage ? "SENDING..." : "TRANSMIT"}
@@ -3238,7 +3261,7 @@ export default function RoomPage() {
             {/* Split Rosters (1 Column) */}
             <div id="roster-panel" className="space-y-4 scroll-mt-24">
               {/* Red Team Roster */}
-              <div className="bg-carbon-900 border border-red-900/60 rounded-lg p-4">
+              <div className="bg-carbon-900 border border-red-900/50 rounded-sm p-3.5 sm:p-4">
                 <div className="flex items-center justify-between mb-3 border-b border-red-900/40 pb-2">
                   <span className="text-xs font-mono font-bold uppercase text-red-400 tracking-wider flex items-center gap-1.5">
                     <Flag className="w-3.5 h-3.5 text-red-500" /> Red Team ({redApparentPlayers.length})
@@ -3255,7 +3278,7 @@ export default function RoomPage() {
                         onClick={() => {
                           if (!isSelf) handleOpenDMWithOperative(player.id);
                         }}
-                        className={`flex items-center justify-between p-2.5 rounded border text-xs font-mono transition-all min-h-[44px] ${
+                        className={`flex items-center justify-between p-2.5 rounded-sm border text-xs font-mono transition-all min-h-[44px] ${
                           isSelf
                             ? "bg-red-950/40 border-red-700"
                             : "bg-carbon-950 border-carbon-800 hover:border-classified-amber/70 hover:bg-carbon-850 cursor-pointer active:scale-[0.98] group"
@@ -3271,7 +3294,7 @@ export default function RoomPage() {
                             {player.displayName}
                           </span>
                           {isSelf ? (
-                            <span className="text-nano bg-red-900/80 text-red-200 px-1.5 py-0.5 rounded shrink-0">
+                            <span className="text-nano bg-red-900/80 text-red-200 border border-red-700/60 px-1.5 py-0.5 rounded-sm font-bold shrink-0">
                               YOU
                             </span>
                           ) : (
@@ -3289,7 +3312,7 @@ export default function RoomPage() {
               </div>
 
               {/* Blue Team Roster */}
-              <div className="bg-carbon-900 border border-blue-900/60 rounded-lg p-4">
+              <div className="bg-carbon-900 border border-blue-900/50 rounded-sm p-3.5 sm:p-4">
                 <div className="flex items-center justify-between mb-3 border-b border-blue-900/40 pb-2">
                   <span className="text-xs font-mono font-bold uppercase text-blue-400 tracking-wider flex items-center gap-1.5">
                     <Flag className="w-3.5 h-3.5 text-blue-500" /> Blue Team ({blueApparentPlayers.length})
@@ -3306,7 +3329,7 @@ export default function RoomPage() {
                         onClick={() => {
                           if (!isSelf) handleOpenDMWithOperative(player.id);
                         }}
-                        className={`flex items-center justify-between p-2.5 rounded border text-xs font-mono transition-all min-h-[44px] ${
+                        className={`flex items-center justify-between p-2.5 rounded-sm border text-xs font-mono transition-all min-h-[44px] ${
                           isSelf
                             ? "bg-blue-950/40 border-blue-700"
                             : "bg-carbon-950 border-carbon-800 hover:border-classified-amber/70 hover:bg-carbon-850 cursor-pointer active:scale-[0.98] group"
@@ -3322,7 +3345,7 @@ export default function RoomPage() {
                             {player.displayName}
                           </span>
                           {isSelf ? (
-                            <span className="text-nano bg-blue-900/80 text-blue-200 px-1.5 py-0.5 rounded shrink-0">
+                            <span className="text-nano bg-blue-900/80 text-blue-200 border border-blue-700/60 px-1.5 py-0.5 rounded-sm font-bold shrink-0">
                               YOU
                             </span>
                           ) : (
