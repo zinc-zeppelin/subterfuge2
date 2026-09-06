@@ -81,107 +81,87 @@ function HomeContent() {
   };
 
   return (
-    <div className="flex-1 flex flex-col items-center justify-center p-6 max-w-4xl mx-auto w-full">
-      {/* Dossier Header */}
-      <div className="text-center mb-10 space-y-3">
-        <div className="inline-block border border-classified-crimson/60 bg-classified-crimson/10 text-red-400 px-3 py-1 rounded text-xs tracking-widest font-mono uppercase">
-          Department of Cryptographic Deception
-        </div>
-        <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight font-mono text-white flex items-center justify-center gap-3">
-          <Terminal className="w-10 h-10 text-classified-amber" />
+    <div className="flex-1 flex flex-col items-center justify-center p-4 max-w-xl mx-auto w-full font-mono">
+      {/* Header */}
+      <div className="text-center mb-8 space-y-2">
+        <h1 className="text-3xl sm:text-4xl font-black tracking-widest text-white flex items-center justify-center gap-2.5">
+          <Terminal className="w-8 h-8 text-classified-amber" />
           SUBTERFUGE
         </h1>
-        <p className="text-sm sm:text-base text-gray-400 max-w-lg mx-auto font-mono">
-          Asynchronous social deduction and strategic espionage. Two factions, embedded traitors, and a single declassified codebook.
+        <p className="text-xs sm:text-sm text-gray-400">
+          Asynchronous social deduction and strategic espionage.
         </p>
       </div>
 
       {/* Error Banner */}
       {error && (
-        <div className="w-full mb-6 p-4 border border-red-800 bg-red-950/50 text-red-300 rounded text-sm font-mono flex items-center gap-3">
-          <ShieldAlert className="w-5 h-5 flex-shrink-0 text-red-400" />
+        <div className="w-full mb-4 p-3 border border-red-800 bg-red-950/60 text-red-300 rounded text-xs flex items-center gap-2">
+          <ShieldAlert className="w-4 h-4 shrink-0 text-red-400" />
           <span>{error}</span>
         </div>
       )}
 
-      {/* Operative Call-sign Input Card */}
-      <div className="w-full bg-carbon-900 border border-carbon-800 rounded-lg p-4 sm:p-6 mb-6 sm:mb-8 shadow-xl">
-        <label className="block text-xs font-mono uppercase text-gray-400 mb-2 tracking-wider">
-          Step 1: Declare Your Operative Call-Sign
+      {/* Operative Call-sign */}
+      <div className="w-full bg-carbon-900 border border-carbon-800 rounded-lg p-4 sm:p-5 mb-4 shadow-lg">
+        <label className="block text-xs uppercase text-gray-400 mb-2 font-bold tracking-wider">
+          Operative Callsign
         </label>
-        <div className="relative">
-          <input
-            id="callsign-input"
-            type="text"
-            value={callsign}
-            onChange={(e) => setCallsign(e.target.value)}
-            placeholder="e.g. FALCON, NIGHTSHADE, CIPHER"
-            maxLength={20}
-            className="w-full bg-carbon-950 border border-carbon-700 rounded px-4 py-3 text-base sm:text-sm font-mono text-white placeholder-gray-600 focus:outline-none focus:border-classified-amber uppercase tracking-wider min-h-[48px]"
-          />
-        </div>
+        <input
+          id="callsign-input"
+          type="text"
+          value={callsign}
+          onChange={(e) => setCallsign(e.target.value)}
+          placeholder="e.g. FALCON, NIGHTSHADE"
+          maxLength={20}
+          className="w-full bg-carbon-950 border border-carbon-700 rounded px-3.5 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-classified-amber uppercase tracking-wider min-h-[44px]"
+        />
       </div>
 
-      {/* Dual Operational Portals */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 w-full">
-        {/* Create Operation Card */}
-        <div className="bg-carbon-900 border border-carbon-800 rounded-lg p-5 sm:p-6 flex flex-col justify-between hover:border-carbon-700 transition-colors">
+      {/* Action Options */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full">
+        {/* Create Operation */}
+        <div className="bg-carbon-900 border border-carbon-800 rounded-lg p-4 flex flex-col justify-between gap-3">
           <div>
-            <div className="flex items-center justify-between mb-3 sm:mb-4">
-              <span className="text-xs font-mono text-classified-amber uppercase tracking-wider flex items-center gap-2">
-                <Radio className="w-4 h-4" /> Directive Alpha
-              </span>
-              <span className="classified-stamp text-[10px] text-classified-amber border-classified-amber">
-                ORIGINATE
-              </span>
+            <div className="text-xs font-bold text-white uppercase tracking-wider mb-1">
+              Create Room
             </div>
-            <h2 className="text-base sm:text-lg font-bold font-mono text-white mb-2">Establish Operation</h2>
-            <p className="text-xs text-gray-400 font-mono mb-4 sm:mb-6">
-              Create a new encrypted room, configure operational duration (4h to 24h), and receive an Operation Code for your operatives.
+            <p className="text-micro text-gray-400">
+              Host an encrypted match with your group.
             </p>
           </div>
           <button
             id="create-room-btn"
             onClick={handleCreateRoom}
             disabled={isLoading}
-            className="w-full min-h-[48px] py-3.5 px-4 bg-classified-crimson hover:bg-red-800 disabled:opacity-50 text-white font-mono font-bold text-xs sm:text-sm tracking-wider uppercase rounded transition-colors active:scale-[0.99] cursor-pointer"
+            className="w-full min-h-[44px] py-2.5 px-3 bg-carbon-800 hover:bg-carbon-700 active:bg-classified-amber active:text-black border border-carbon-600 hover:border-classified-amber text-classified-amber font-bold text-xs tracking-wider uppercase rounded transition-colors cursor-pointer"
           >
-            {isLoading ? "ESTABLISHING..." : "COMMENCE OPERATION"}
+            {isLoading ? "CREATING..." : "CREATE OPERATION"}
           </button>
         </div>
 
-        {/* Join Operation Card */}
-        <div className="bg-carbon-900 border border-carbon-800 rounded-lg p-5 sm:p-6 flex flex-col justify-between hover:border-carbon-700 transition-colors">
+        {/* Join Operation */}
+        <div className="bg-carbon-900 border border-carbon-800 rounded-lg p-4 flex flex-col justify-between gap-3">
           <div>
-            <div className="flex items-center justify-between mb-3 sm:mb-4">
-              <span className="text-xs font-mono text-blue-400 uppercase tracking-wider flex items-center gap-2">
-                <KeyRound className="w-4 h-4" /> Directive Beta
-              </span>
-              <span className="classified-stamp text-[10px] text-blue-400 border-blue-400">
-                INFILTRATE
-              </span>
+            <div className="text-xs font-bold text-white uppercase tracking-wider mb-1">
+              Join Room
             </div>
-            <h2 className="text-base sm:text-lg font-bold font-mono text-white mb-2">Access Operation</h2>
-            <p className="text-xs text-gray-400 font-mono mb-4">
-              Enter an existing 6-character room code to join an active operational roster.
-            </p>
             <input
               id="room-code-input"
               type="text"
               value={roomCode}
               onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
-              placeholder="ROOM CODE (e.g. SUB94X)"
+              placeholder="ROOM CODE"
               maxLength={6}
-              className="w-full bg-carbon-950 border border-carbon-700 rounded px-4 py-2.5 text-base sm:text-sm font-mono text-white placeholder-gray-600 focus:outline-none focus:border-blue-500 uppercase tracking-widest mb-4 sm:mb-6 min-h-[48px]"
+              className="w-full bg-carbon-950 border border-carbon-700 rounded px-3 py-1.5 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-classified-intelBlue uppercase tracking-widest min-h-[38px] mt-1"
             />
           </div>
           <button
             id="join-room-btn"
             onClick={handleJoinRoom}
             disabled={isLoading}
-            className="w-full min-h-[48px] py-3.5 px-4 bg-classified-intelBlue hover:bg-blue-900 disabled:opacity-50 text-white font-mono font-bold text-xs sm:text-sm tracking-wider uppercase rounded transition-colors active:scale-[0.99] cursor-pointer"
+            className="w-full min-h-[44px] py-2.5 px-3 bg-carbon-800 hover:bg-carbon-700 active:bg-blue-600 active:text-white border border-carbon-600 hover:border-blue-500 text-blue-400 font-bold text-xs tracking-wider uppercase rounded transition-colors cursor-pointer"
           >
-            {isLoading ? "AUTHENTICATING..." : "ACCESS CHANNEL"}
+            {isLoading ? "JOINING..." : "JOIN OPERATION"}
           </button>
         </div>
       </div>
