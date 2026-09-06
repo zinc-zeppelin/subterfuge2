@@ -136,13 +136,38 @@ export class SixPlayerHarness {
   }
 
   /**
-   * Assert that all 6 browser contexts see the INFILTRATION phase badge
+   * Assert that all 6 browser contexts see the INFILTRATION phase badge and acknowledge briefings
    */
   public async expectAllInInfiltrationPhase(): Promise<void> {
     for (const op of this.sessions) {
       await expect(op.page.locator("#room-phase-badge")).toHaveText("INFILTRATION", {
         timeout: 15000,
       });
+    }
+    await this.acknowledgeAllBriefings();
+  }
+
+  /**
+   * Acknowledge and burn the pre-mission operational briefing for a player
+   */
+  public async acknowledgeBriefing(playerIndex: number): Promise<void> {
+    const op = this.sessions[playerIndex];
+    const modal = op.page.locator("#operational-briefing-modal");
+    if (await modal.isVisible({ timeout: 1500 }).catch(() => false)) {
+      const wordAttr = await modal.getAttribute("data-assigned-word");
+      const word = wordAttr || (await op.page.locator("#briefing-assigned-word").innerText());
+      await op.page.fill("#briefing-codeword-input", word.trim());
+      await op.page.click("#burn-briefing-btn", { force: true });
+      await expect(modal).not.toBeVisible({ timeout: 5000 });
+    }
+  }
+
+  /**
+   * Acknowledge and burn briefings across all sessions
+   */
+  public async acknowledgeAllBriefings(): Promise<void> {
+    for (let i = 0; i < this.sessions.length; i++) {
+      await this.acknowledgeBriefing(i);
     }
   }
 
@@ -151,6 +176,7 @@ export class SixPlayerHarness {
    */
   public async decryptAndGetSecretWord(playerIndex: number): Promise<string> {
     const op = this.sessions[playerIndex];
+    await this.acknowledgeBriefing(playerIndex);
     // Initially word should be redacted
     await expect(op.page.locator("#self-word-redacted")).toBeVisible();
 
@@ -176,6 +202,7 @@ export class SixPlayerHarness {
     role: string;
   }> {
     const op = this.sessions[playerIndex];
+    await this.acknowledgeBriefing(playerIndex);
     const apparentText = await op.page.locator("#self-apparent-team").innerText();
     const actualEl = op.page.locator("#self-actual-team");
     const roleEl = op.page.locator("#self-role");

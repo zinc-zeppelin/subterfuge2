@@ -97,6 +97,16 @@ test.describe("Slice 12: Mobile Browser Audit (iOS Safari & Android Chrome)", ()
     await startBtn.click();
     await expect(page.locator("#room-phase-badge")).toContainText("INFILTRATION", { timeout: 15000 });
 
+    // Verify and complete Briefing Gate (Anti-Coercion Protocol)
+    await expect(page.locator("#operational-briefing-modal")).toBeVisible();
+    const briefingModal = page.locator("#operational-briefing-modal");
+    const assignedWord = await briefingModal.getAttribute("data-assigned-word");
+    if (assignedWord) {
+      await page.fill("#briefing-codeword-input", assignedWord);
+    }
+    await page.click("#burn-briefing-btn", { force: true });
+    await expect(page.locator("#operational-briefing-modal")).not.toBeVisible();
+
     // 5. Infiltration Phase: Touch Gesture Verification (Hold-to-Decrypt)
     await expect(page.locator("#decrypt-word-btn")).toBeVisible();
     await expect(page.locator("#self-word-redacted")).toBeVisible();

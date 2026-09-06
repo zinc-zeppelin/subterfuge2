@@ -69,29 +69,44 @@ test.describe("Slice 13: Playtesting Enhancements & Dev Mode Controls", () => {
     const molePage = harness.sessions[moleIdx].page;
     const moleDossier = await harness.getPlayerDossier(moleIdx);
 
-    // 3. Test Mole Cover Identity Masking (Anti-Shoulder-Surfing)
-    // Idle/Resting State: Mole screen displays cover identity matching innocent teammates!
+    // 3. Test Mole Cover Identity Masking & Camouflage Word Spoofing
+    // Mole screen displays symmetrical cover identity matching innocent teammates (AGENT)!
     await expect(molePage.locator("#self-role")).toHaveText("AGENT");
-    await expect(molePage.locator("#self-actual-team")).toContainText(
-      `LOYAL TO ${moleDossier.apparentTeam} TEAM`
-    );
     await expect(molePage.locator("#self-word-redacted")).toBeVisible();
 
-    // Press and Hold Decrypt: Reveals true Mole identity and secret code word!
+    // Press and Hold Decrypt: Reveals assigned word, but role remains AGENT (zero mole tell!)
     await molePage.dispatchEvent("#decrypt-word-btn", "mousedown");
-    await expect(molePage.locator("#self-role")).toHaveText("MOLE");
-    await expect(molePage.locator("#self-actual-team")).toContainText(
-      `LOYAL TO ${moleDossier.actualTeam} TEAM`
-    );
-    await expect(molePage.locator("#self-assigned-word")).toBeVisible();
-
-    // Release: Immediately re-masks to innocent Agent cover!
-    await molePage.dispatchEvent("#decrypt-word-btn", "mouseup");
     await expect(molePage.locator("#self-role")).toHaveText("AGENT");
-    await expect(molePage.locator("#self-actual-team")).toContainText(
-      `LOYAL TO ${moleDossier.apparentTeam} TEAM`
-    );
+    await expect(molePage.locator("#self-assigned-word")).toBeVisible();
+    const authenticWord = (await molePage.locator("#self-assigned-word").innerText()).trim();
+
+    // Release button
+    await molePage.dispatchEvent("#decrypt-word-btn", "mouseup");
     await expect(molePage.locator("#self-word-redacted")).toBeVisible();
+
+    // Test Camouflage Word Spoofing: Operative configures decoy word
+    await molePage.click("#configure-spoof-word-btn");
+    await expect(molePage.locator("#spoof-word-modal")).toBeVisible();
+    await molePage.fill("#spoof-word-input", "DECOYWORD");
+    await molePage.click("#save-spoof-word-btn");
+    await expect(molePage.locator("#spoof-word-modal")).not.toBeVisible();
+
+    // Press and Hold Decrypt: Now reveals DECOYWORD with zero visual tell!
+    await molePage.dispatchEvent("#decrypt-word-btn", "mousedown");
+    await expect(molePage.locator("#self-assigned-word")).toHaveText("DECOYWORD");
+    await expect(molePage.locator("#self-role")).toHaveText("AGENT");
+    await molePage.dispatchEvent("#decrypt-word-btn", "mouseup");
+
+    // Set word back to authentic word manually
+    await molePage.click("#configure-spoof-word-btn");
+    await expect(molePage.locator("#spoof-word-modal")).toBeVisible();
+    await molePage.fill("#spoof-word-input", authenticWord);
+    await molePage.click("#save-spoof-word-btn");
+    await expect(molePage.locator("#spoof-word-modal")).not.toBeVisible();
+
+    await molePage.dispatchEvent("#decrypt-word-btn", "mousedown");
+    await expect(molePage.locator("#self-assigned-word")).toHaveText(authenticWord);
+    await molePage.dispatchEvent("#decrypt-word-btn", "mouseup");
 
     // 4. Test Channel Unread Badges & Incoming DM Alert Toast
     const op1Dossier = await harness.getPlayerDossier(0);

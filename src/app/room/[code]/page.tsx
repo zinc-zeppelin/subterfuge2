@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { ClientGameState, Message, ChannelType } from "@/lib/types/game";
 import {
   Users,
+  Shield,
   ShieldCheck,
   Clock,
   Terminal,
@@ -119,6 +120,13 @@ export default function RoomPage() {
   const [isStreamSafe, setIsStreamSafe] = useState(false);
   const [isConfirmingBurn, setIsConfirmingBurn] = useState(false);
   const [isConfirmingVerdict, setIsConfirmingVerdict] = useState(false);
+
+  // Ephemeral Pre-Mission Briefing & Camouflage Word States
+  const [isBriefingBurned, setIsBriefingBurned] = useState(false);
+  const [briefingWordInput, setBriefingWordInput] = useState("");
+  const [spoofWord, setSpoofWord] = useState<string>("");
+  const [isSpoofModalOpen, setIsSpoofModalOpen] = useState(false);
+  const [spoofModalInput, setSpoofModalInput] = useState("");
 
   const decryptTimerRef = useRef<NodeJS.Timeout | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
@@ -770,18 +778,36 @@ export default function RoomPage() {
     }
   }, [gameState?.self.role]);
 
-  // Keyboard shortcut: Escape dismisses Field Manual & confirmation modals
+  // Keyboard shortcut: Escape dismisses Field Manual, spoof modal & confirmation modals
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         setIsManualOpen(false);
         setIsConfirmingBurn(false);
         setIsConfirmingVerdict(false);
+        setIsSpoofModalOpen(false);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
+
+  // Restore or reset briefing and spoof word state
+  useEffect(() => {
+    if (typeof window !== "undefined" && code && gameState?.self?.id) {
+      if (gameState.room.phase === "LOBBY") {
+        sessionStorage.removeItem(`subterfuge_briefing_burned_${code}_${gameState.self.id}`);
+        localStorage.removeItem(`subterfuge_spoof_word_${code}_${gameState.self.id}`);
+        setIsBriefingBurned(false);
+        setSpoofWord("");
+      } else {
+        const isBurned = sessionStorage.getItem(`subterfuge_briefing_burned_${code}_${gameState.self.id}`);
+        setIsBriefingBurned(isBurned === "true");
+        const savedSpoof = localStorage.getItem(`subterfuge_spoof_word_${code}_${gameState.self.id}`);
+        if (savedSpoof) setSpoofWord(savedSpoof);
+      }
+    }
+  }, [code, gameState?.self?.id, gameState?.room?.phase]);
 
   // Dev mode initialization from query param or localStorage
   useEffect(() => {
@@ -1205,6 +1231,29 @@ export default function RoomPage() {
       decryptTimerRef.current = null;
     }
     setIsDecrypted(false);
+  };
+
+  const handleBurnBriefing = () => {
+    if (!gameState?.self?.assignedWord) return;
+    if (briefingWordInput.trim().toUpperCase() !== gameState.self.assignedWord.toUpperCase()) return;
+    if (typeof window !== "undefined" && code && gameState.self.id) {
+      sessionStorage.setItem(`subterfuge_briefing_burned_${code}_${gameState.self.id}`, "true");
+    }
+    setIsBriefingBurned(true);
+    setBriefingWordInput("");
+  };
+
+  const handleSaveSpoofWord = () => {
+    const cleanWord = spoofModalInput.trim().toUpperCase().replace(/[^A-Z]/g, "");
+    setSpoofWord(cleanWord);
+    if (typeof window !== "undefined" && code && gameState?.self?.id) {
+      if (cleanWord) {
+        localStorage.setItem(`subterfuge_spoof_word_${code}_${gameState.self.id}`, cleanWord);
+      } else {
+        localStorage.removeItem(`subterfuge_spoof_word_${code}_${gameState.self.id}`);
+      }
+    }
+    setIsSpoofModalOpen(false);
   };
 
   if (error) {
@@ -2471,15 +2520,16 @@ export default function RoomPage() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 font-mono text-sm border-t border-carbon-800 pt-4">
-              {/* Apparent Cover vs True Allegiance */}
+              {/* Apparent Cover & Clearance Station */}
               <div className="space-y-2">
                 <div>
                   <div className="text-xs text-gray-500 uppercase tracking-wider">Apparent Cover</div>
-                  <p className="text-nano text-gray-400 font-mono mt-0.5">Public identity displayed to opposing operatives</p>
+                  <p className="text-nano text-gray-400 font-mono mt-0.5">Assigned Operational Faction</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <span
                     id="self-apparent-team"
+                    data-apparent-team={self.apparentTeam}
                     className={`px-2.5 py-1 rounded-sm text-xs font-bold uppercase tracking-widest border ${
                       self.apparentTeam === "RED"
                         ? "bg-red-950/40 border-red-800 text-red-400"
@@ -2490,95 +2540,47 @@ export default function RoomPage() {
                   </span>
                 </div>
 
+                {/* Preserves data attributes for automated harness with zero visible allegiance on screen */}
+                <span id="self-actual-team" data-actual-team={self.actualTeam} className="sr-only" aria-hidden="true">
+                  {self.actualTeam}
+                </span>
+
                 <div className="pt-2">
-                  <div className="text-xs text-gray-500 uppercase tracking-wider">True Allegiance</div>
-                  <p className="text-nano text-gray-400 font-mono mt-0.5 mb-2">Your actual secret mission objective</p>
-                  {self.role === "MOLE" ? (
-                    isDecrypted ? (
-                      <div
-                        id="self-actual-team"
-                        data-actual-team={self.actualTeam}
-                        data-apparent-team={self.apparentTeam}
-                        className={`font-bold tracking-wider text-xs uppercase flex items-center gap-1.5 ${
-                          self.actualTeam === "RED" ? "text-red-400" : "text-blue-400"
-                        }`}
-                      >
-                        <span>LOYAL TO {self.actualTeam} TEAM</span>
-                        <span className="text-nano bg-red-950 text-red-400 border border-red-800 px-1.5 py-0.5 rounded-sm font-bold animate-pulse">
-                          SLEEPER
-                        </span>
-                      </div>
-                    ) : (
-                      <div
-                        id="self-actual-team"
-                        data-actual-team={self.actualTeam}
-                        data-apparent-team={self.apparentTeam}
-                        className={`font-bold tracking-wider text-xs uppercase ${
-                          self.apparentTeam === "RED" ? "text-red-400" : "text-blue-400"
-                        }`}
-                      >
-                        LOYAL TO {self.apparentTeam} TEAM
-                      </div>
-                    )
-                  ) : (
-                    <div
-                      id="self-actual-team"
-                      data-actual-team={self.actualTeam}
-                      className={`font-bold tracking-wider text-xs uppercase ${
-                        self.actualTeam === "RED" ? "text-red-400" : "text-blue-400"
-                      }`}
-                    >
-                      LOYAL TO {self.actualTeam} TEAM
-                    </div>
-                  )}
+                  <div className="text-xs text-gray-500 uppercase tracking-wider">Clearance Status</div>
+                  <p className="text-nano text-gray-400 font-mono mt-0.5">Verified Station Connection</p>
+                  <div className="font-bold tracking-wider text-xs uppercase text-emerald-400 flex items-center gap-1.5 mt-1">
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                    <span>AUTHENTICATED OPERATIVE</span>
+                  </div>
                 </div>
               </div>
 
-              {/* Role & Objective */}
+              {/* Symmetrical Role & Objective */}
               <div className="space-y-2">
                 <div className="text-xs text-gray-500 uppercase tracking-wider">Assigned Role</div>
                 <div className="flex items-center gap-2">
-                  {self.role === "MOLE" ? (
-                    isDecrypted ? (
-                      <span
-                        id="self-role"
-                        data-actual-role={self.role}
-                        className="px-2.5 py-1 rounded-sm text-xs font-bold uppercase tracking-wider border bg-purple-950/40 border-purple-700 text-purple-400"
-                      >
-                        MOLE
-                      </span>
-                    ) : (
-                      <span
-                        id="self-role"
-                        data-actual-role={self.role}
-                        className="px-2.5 py-1 rounded-sm text-xs font-bold uppercase tracking-wider border bg-carbon-850 border-carbon-700 text-gray-300"
-                      >
-                        AGENT
-                      </span>
-                    )
+                  {self.role === "SPYMASTER" ? (
+                    <span
+                      id="self-role"
+                      data-actual-role={self.role}
+                      className="px-2.5 py-1 rounded-sm text-xs font-bold uppercase tracking-wider border bg-amber-950/40 border-amber-700 text-amber-400"
+                    >
+                      SPYMASTER
+                    </span>
                   ) : (
                     <span
                       id="self-role"
                       data-actual-role={self.role}
-                      className={`px-2.5 py-1 rounded-sm text-xs font-bold uppercase tracking-wider border ${
-                        self.role === "SPYMASTER"
-                          ? "bg-amber-950/40 border-amber-700 text-amber-400"
-                          : "bg-carbon-850 border-carbon-700 text-gray-300"
-                      }`}
+                      className="px-2.5 py-1 rounded-sm text-xs font-bold uppercase tracking-wider border bg-carbon-850 border-carbon-700 text-gray-300"
                     >
-                      {self.role}
+                      AGENT
                     </span>
                   )}
                 </div>
                 <p className="text-xs text-gray-400 font-mono pt-1">
-                  {self.role === "SPYMASTER" &&
-                    "Operation Commander. Holds exclusive lock-in authority on your team's final verdict."}
-                  {self.role === "MOLE" &&
-                    (isDecrypted
-                      ? "Covert Traitor. Infiltrate enemy radio channels and secretly transmit intelligence to your true faction."
-                      : "Field Operative. Protect your code word, extract opposing words, and uncover the mole in your ranks.")}
-                  {self.role === "AGENT" &&
-                    "Field Operative. Protect your code word, extract opposing words, and uncover the mole in your ranks."}
+                  {self.role === "SPYMASTER"
+                    ? "Operation Commander. Holds exclusive lock-in authority on your team's final verdict."
+                    : "Field Operative. Protect your code word, extract opposing words, and uncover the mole in your ranks."}
                 </p>
               </div>
 
@@ -2598,9 +2600,10 @@ export default function RoomPage() {
                     {isDecrypted ? (
                       <span
                         id="self-assigned-word"
+                        data-authentic-word={self.assignedWord}
                         className="text-xl font-bold font-mono tracking-widest text-classified-amber bg-amber-950/30 px-3 py-1 rounded-sm border border-amber-700/50 inline-block uppercase"
                       >
-                        {isStreamSafe ? "•••••••• (STREAM-SAFE)" : self.assignedWord}
+                        {isStreamSafe ? "•••••••• (STREAM-SAFE)" : (spoofWord || self.assignedWord)}
                       </span>
                     ) : (
                       <span
@@ -2613,70 +2616,91 @@ export default function RoomPage() {
                   </div>
                 </div>
 
-                <button
-                  id="decrypt-word-btn"
-                  tabIndex={0}
-                  role="button"
-                  aria-label="Hold Space, Enter, or pointer to decrypt secret code word"
-                  onKeyDown={(e) => {
-                    if (e.key === " " || e.key === "Enter") {
+                <div className="space-y-2">
+                  <button
+                    id="decrypt-word-btn"
+                    tabIndex={0}
+                    role="button"
+                    aria-label="Hold Space, Enter, or pointer to decrypt secret code word"
+                    onKeyDown={(e) => {
+                      if (e.key === " " || e.key === "Enter") {
+                        e.preventDefault();
+                        if (!isDecrypted) handleDecryptStart();
+                      }
+                    }}
+                    onKeyUp={(e) => {
+                      if (e.key === " " || e.key === "Enter") {
+                        e.preventDefault();
+                        handleDecryptEnd();
+                      }
+                    }}
+                    onPointerDown={(e) => {
                       e.preventDefault();
-                      if (!isDecrypted) handleDecryptStart();
-                    }
-                  }}
-                  onKeyUp={(e) => {
-                    if (e.key === " " || e.key === "Enter") {
+                      handleDecryptStart();
+                    }}
+                    onPointerUp={(e) => {
                       e.preventDefault();
                       handleDecryptEnd();
-                    }
-                  }}
-                  onPointerDown={(e) => {
-                    e.preventDefault();
-                    handleDecryptStart();
-                  }}
-                  onPointerUp={(e) => {
-                    e.preventDefault();
-                    handleDecryptEnd();
-                  }}
-                  onPointerCancel={() => handleDecryptEnd()}
-                  onTouchStart={(e) => {
-                    e.preventDefault();
-                    handleDecryptStart();
-                  }}
-                  onTouchEnd={(e) => {
-                    e.preventDefault();
-                    handleDecryptEnd();
-                  }}
-                  onTouchCancel={() => handleDecryptEnd()}
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    handleDecryptStart();
-                  }}
-                  onMouseUp={(e) => {
-                    e.preventDefault();
-                    handleDecryptEnd();
-                  }}
-                  onContextMenu={(e) => e.preventDefault()}
-                  style={{
-                    WebkitTouchCallout: "none",
-                    WebkitUserSelect: "none",
-                    userSelect: "none",
-                    touchAction: "manipulation",
-                  }}
-                  className={`w-full min-h-[44px] py-2.5 px-3 bg-carbon-850 hover:bg-carbon-800 active:bg-classified-amber active:text-black border border-carbon-700 rounded-sm text-xs font-mono font-bold uppercase tracking-wider text-gray-200 flex items-center justify-center gap-2 transition-colors select-none cursor-pointer ${
-                    isDecrypted ? "hold-progress-active" : ""
-                  }`}
-                >
-                  {isDecrypted ? (
-                    <>
-                      <EyeOff className="w-3.5 h-3.5" /> RELEASE TO CONCEAL
-                    </>
-                  ) : (
-                    <>
-                      <Eye className="w-3.5 h-3.5" /> HOLD TO DECRYPT
-                    </>
-                  )}
-                </button>
+                    }}
+                    onPointerCancel={() => handleDecryptEnd()}
+                    onTouchStart={(e) => {
+                      e.preventDefault();
+                      handleDecryptStart();
+                    }}
+                    onTouchEnd={(e) => {
+                      e.preventDefault();
+                      handleDecryptEnd();
+                    }}
+                    onTouchCancel={() => handleDecryptEnd()}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      handleDecryptStart();
+                    }}
+                    onMouseUp={(e) => {
+                      e.preventDefault();
+                      handleDecryptEnd();
+                    }}
+                    onContextMenu={(e) => e.preventDefault()}
+                    style={{
+                      WebkitTouchCallout: "none",
+                      WebkitUserSelect: "none",
+                      userSelect: "none",
+                      touchAction: "manipulation",
+                    }}
+                    className={`w-full min-h-[44px] py-2.5 px-3 bg-carbon-850 hover:bg-carbon-800 active:bg-classified-amber active:text-black border border-carbon-700 rounded-sm text-xs font-mono font-bold uppercase tracking-wider text-gray-200 flex items-center justify-center gap-2 transition-colors select-none cursor-pointer ${
+                      isDecrypted ? "hold-progress-active" : ""
+                    }`}
+                  >
+                    {isDecrypted ? (
+                      <>
+                        <EyeOff className="w-3.5 h-3.5" /> RELEASE TO CONCEAL
+                      </>
+                    ) : (
+                      <>
+                        <Eye className="w-3.5 h-3.5" /> HOLD TO DECRYPT
+                      </>
+                    )}
+                  </button>
+
+                  {/* Camouflage Spoof Word Quick Control */}
+                  <div className="pt-2 border-t border-carbon-800 flex items-center justify-between">
+                    <span className="text-nano text-gray-500 uppercase tracking-wider">
+                      DECOY WORD:
+                    </span>
+                    <button
+                      id="configure-spoof-word-btn"
+                      type="button"
+                      onClick={() => {
+                        setSpoofModalInput(spoofWord || "");
+                        setIsSpoofModalOpen(true);
+                      }}
+                      className="text-nano text-gray-400 hover:text-classified-amber flex items-center gap-1 font-mono uppercase px-2 py-1 bg-carbon-900 hover:bg-carbon-850 border border-carbon-700 rounded transition-colors cursor-pointer min-h-[32px]"
+                    >
+                      <Shield className="w-3 h-3 text-classified-amber" />
+                      <span>{spoofWord ? `DECOY: ${spoofWord}` : "SET CAMOUFLAGE"}</span>
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -3754,6 +3778,267 @@ export default function RoomPage() {
               >
                 <Lock className="w-4 h-4" />
                 AUTHENTICATE & TRANSMIT
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* EPHEMERAL PRE-MISSION OPERATIONAL BRIEFING MODAL ("BURN AFTER READING") */}
+      {room.phase === "INFILTRATION" && !isBriefingBurned && self.role && self.assignedWord && (
+        <div
+          id="operational-briefing-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="briefing-title"
+          data-assigned-word={self.assignedWord}
+          className="fixed inset-0 z-[60] bg-black/95 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 pb-24 overflow-y-auto animate-in fade-in duration-300"
+        >
+          <div className="bg-carbon-900 border-2 border-classified-amber rounded-lg max-w-2xl w-full p-6 sm:p-8 font-mono text-sm shadow-2xl space-y-6 my-auto">
+            {/* Briefing Stamp Header */}
+            <div className="flex items-center justify-between border-b border-carbon-800 pb-4">
+              <div className="flex items-center gap-3">
+                <Radio className="w-6 h-6 text-classified-amber shrink-0 animate-pulse" />
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 id="briefing-title" className="text-base sm:text-lg font-bold text-white uppercase tracking-wider">
+                      Classified Operational Briefing
+                    </h2>
+                    <span className="classified-stamp text-nano text-classified-crimson border-classified-crimson py-0.2 px-1">
+                      EYES ONLY
+                    </span>
+                  </div>
+                  <p className="text-nano text-gray-400">
+                    DIRECTORATE OF ESPIONAGE OPERATIONS // PRE-MISSION DIRECTIVES
+                  </p>
+                </div>
+              </div>
+              <span className="text-nano bg-carbon-800 text-classified-amber border border-carbon-700 px-2 py-1 rounded">
+                PHASE: INFILTRATION
+              </span>
+            </div>
+
+            {/* Role-Tailored Mission Briefing Body */}
+            <div className="space-y-4 text-xs sm:text-sm text-gray-300 leading-relaxed bg-carbon-950 p-4 sm:p-5 rounded border border-carbon-800">
+              {self.role === "SPYMASTER" && (
+                <>
+                  <div className="flex items-center justify-between border-b border-carbon-800 pb-2 mb-3">
+                    <span className="text-classified-amber font-bold uppercase tracking-widest text-xs">
+                      ROLE: {self.apparentTeam} SPYMASTER (COMMANDER)
+                    </span>
+                    <span className="text-nano text-emerald-400 font-bold uppercase">VERDICT AUTHORITY</span>
+                  </div>
+                  <p>
+                    You are the designated <strong className="text-white">Spymaster</strong> for the{" "}
+                    <strong className="text-classified-amber">{self.apparentTeam} FACTION</strong>. You hold the
+                    exclusive authority to submit your faction&apos;s final verdict guesses and indict the enemy mole.
+                  </p>
+                  <ul className="list-disc pl-5 space-y-1.5 text-gray-400 pt-1">
+                    <li>
+                      <strong className="text-white">Deliberation:</strong> Communicate across Public wire and Team radio
+                      to extract opposing words from the enemy.
+                    </li>
+                    <li>
+                      <strong className="text-white">Counter-Espionage:</strong> An enemy mole is embedded in your team
+                      who may feed decoy words or false leads. Cross-examine your operatives.
+                    </li>
+                  </ul>
+                </>
+              )}
+
+              {self.role === "MOLE" && (
+                <>
+                  <div className="flex items-center justify-between border-b border-carbon-800 pb-2 mb-3">
+                    <span className="text-classified-crimson font-bold uppercase tracking-widest text-xs">
+                      ROLE: EMBEDDED SLEEPER MOLE
+                    </span>
+                    <span className="text-nano bg-red-950 text-red-400 border border-red-800 px-1.5 py-0.5 rounded font-bold uppercase animate-pulse">
+                      DEEP UNDERCOVER
+                    </span>
+                  </div>
+                  <p>
+                    <strong className="text-white">Cover Identity:</strong> {self.apparentTeam} FACTION FIELD AGENT.
+                    <br />
+                    <strong className="text-white">True Allegiance:</strong>{" "}
+                    <span className={self.actualTeam === "RED" ? "text-red-400 font-bold" : "text-blue-400 font-bold"}>
+                      LOYAL TO {self.actualTeam} FACTION
+                    </span>.
+                  </p>
+                  <p className="text-classified-amber font-semibold pt-1">
+                    WIN CONDITION: You win if and only if your TRUE FACTION ({self.actualTeam}) wins the match!
+                  </p>
+                  <ul className="list-disc pl-5 space-y-1.5 text-gray-400 pt-1">
+                    <li>
+                      <strong className="text-white">Anti-Coercion Cover:</strong> To protect you against physical screen
+                      inspections, your active terminal will show 100% standard Field Agent cover. There will be ZERO
+                      trace of your mole identity on your active screen.
+                    </li>
+                    <li>
+                      <strong className="text-white">Covert Contact:</strong> Establish covert contact with operatives
+                      on your true faction (Spymaster or Field Agents) using private 1-on-1 DMs to secretly transmit
+                      intelligence and coordinate.
+                    </li>
+                    <li>
+                      <strong className="text-white">Anti-Forensic Burn:</strong> Always BURN your DM history after sending
+                      messages to leave your telegraph logs completely blank.
+                    </li>
+                  </ul>
+                  <p className="text-nano text-red-400 border-t border-carbon-800 pt-2 italic">
+                    NOTICE: This briefing is the ONLY place your sleeper status is ever displayed. Once burned, your
+                    terminal will look indistinguishable from a loyal teammate&apos;s.
+                  </p>
+                </>
+              )}
+
+              {self.role === "AGENT" && (
+                <>
+                  <div className="flex items-center justify-between border-b border-carbon-800 pb-2 mb-3">
+                    <span className="text-gray-200 font-bold uppercase tracking-widest text-xs">
+                      ROLE: {self.apparentTeam} FIELD AGENT
+                    </span>
+                    <span className="text-nano text-classified-amber font-bold uppercase">LOYAL OPERATIVE</span>
+                  </div>
+                  <p>
+                    You are an active <strong className="text-white">Field Operative</strong> for the{" "}
+                    <strong className="text-classified-amber">{self.apparentTeam} FACTION</strong>. Your mission is to
+                    protect your code word from enemy extraction while collaborating on Team radio to discover enemy words.
+                  </p>
+                  <ul className="list-disc pl-5 space-y-1.5 text-gray-400 pt-1">
+                    <li>
+                      <strong className="text-white">Deliberation Wire:</strong> Propose candidate code words on the team
+                      deliberation board to assist your Spymaster.
+                    </li>
+                    <li>
+                      <strong className="text-white">Vigilance:</strong> An enemy sleeper is embedded in your ranks.
+                      Watch for inconsistent stories, deflections, or false leads.
+                    </li>
+                  </ul>
+                </>
+              )}
+            </div>
+
+            {/* Official Assigned Codeword Display */}
+            <div className="bg-carbon-950 border border-carbon-800 rounded p-4 text-center space-y-1.5">
+              <span className="text-nano text-gray-500 uppercase tracking-widest font-bold">
+                YOUR OFFICIAL ASSIGNED CODE WORD:
+              </span>
+              <div>
+                <span
+                  id="briefing-assigned-word"
+                  className="text-2xl sm:text-3xl font-black font-mono tracking-widest text-classified-amber bg-amber-950/40 px-4 py-1.5 rounded border border-amber-700/60 inline-block uppercase"
+                >
+                  {self.assignedWord}
+                </span>
+              </div>
+              <p className="text-nano text-gray-400 font-mono">
+                All assigned code words share a single classified operational theme.
+              </p>
+            </div>
+
+            {/* Commit to Memory Authentication Gate */}
+            <div className="space-y-3 pt-1 border-t border-carbon-800">
+              <label htmlFor="briefing-codeword-input" className="block text-xs text-gray-300 font-bold uppercase tracking-wider">
+                Type your assigned code word to commit orders to memory:
+              </label>
+              <input
+                id="briefing-codeword-input"
+                type="text"
+                autoComplete="off"
+                spellCheck="false"
+                value={briefingWordInput}
+                onChange={(e) => setBriefingWordInput(e.target.value.toUpperCase())}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && briefingWordInput.trim().toUpperCase() === self.assignedWord?.toUpperCase()) {
+                    handleBurnBriefing();
+                  }
+                }}
+                placeholder="TYPE ASSIGNED CODE WORD"
+                className="w-full bg-carbon-950 border border-carbon-700 focus:border-classified-amber text-white font-mono text-center text-sm font-bold uppercase tracking-widest px-4 py-3 rounded outline-none transition-colors"
+              />
+
+              <button
+                id="burn-briefing-btn"
+                type="button"
+                disabled={briefingWordInput.trim().toUpperCase() !== self.assignedWord?.toUpperCase()}
+                onClick={handleBurnBriefing}
+                className="w-full min-h-[48px] px-6 py-3 bg-classified-amber text-black hover:bg-amber-400 font-mono font-bold uppercase text-xs tracking-wider rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex items-center justify-center gap-2 active:scale-95 shadow-lg"
+              >
+                <Flame className="w-4 h-4 text-black" />
+                AUTHENTICATE CODEWORD & BURN BRIEFING
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CAMOUFLAGE / SPOOF DISPLAY WORD CONFIGURATION MODAL */}
+      {isSpoofModalOpen && (
+        <div
+          id="spoof-word-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="spoof-modal-title"
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-200"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setIsSpoofModalOpen(false);
+          }}
+        >
+          <div className="bg-carbon-900 border-2 border-classified-amber rounded-lg max-w-md w-full p-5 sm:p-6 shadow-2xl font-mono space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-amber-950/80 border border-amber-800 rounded">
+                <Shield className="w-6 h-6 text-classified-amber" />
+              </div>
+              <div>
+                <h3 id="spoof-modal-title" className="text-sm sm:text-base font-bold text-white uppercase tracking-wider">
+                  Tactical Decoy // Display Word
+                </h3>
+                <span className="text-nano text-classified-amber uppercase tracking-widest font-bold">
+                  ZERO VISUAL TELL // ANTI-COERCION
+                </span>
+              </div>
+            </div>
+
+            <p className="text-xs text-gray-300 leading-relaxed">
+              Configure the code word to display on this station when holding to decrypt. This allows you to feed
+              false intelligence or protect your authentic word against physical screen inspections. The display word
+              will render with <strong className="text-white">ZERO visual tells</strong>.
+            </p>
+
+            <div className="space-y-1.5">
+              <label htmlFor="spoof-word-input" className="block text-micro text-gray-400 uppercase tracking-wider font-bold">
+                Display Code Word:
+              </label>
+              <input
+                id="spoof-word-input"
+                type="text"
+                autoComplete="off"
+                spellCheck="false"
+                value={spoofModalInput}
+                onChange={(e) => setSpoofModalInput(e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, ""))}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleSaveSpoofWord();
+                }}
+                placeholder="ENTER DISPLAY CODE WORD"
+                className="w-full bg-carbon-950 border border-carbon-700 focus:border-classified-amber text-white font-mono text-sm uppercase tracking-widest px-3 py-2.5 rounded outline-none"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2 border-t border-carbon-800">
+              <button
+                id="cancel-spoof-word-btn"
+                type="button"
+                onClick={() => setIsSpoofModalOpen(false)}
+                className="min-h-[44px] px-4 py-2 bg-carbon-800 hover:bg-carbon-700 text-white rounded font-mono uppercase text-xs tracking-wider transition-colors cursor-pointer"
+              >
+                CANCEL
+              </button>
+              <button
+                id="save-spoof-word-btn"
+                type="button"
+                onClick={handleSaveSpoofWord}
+                className="min-h-[44px] px-4 py-2 bg-classified-amber text-black hover:bg-amber-400 font-mono font-bold uppercase text-xs tracking-wider rounded transition-colors cursor-pointer active:scale-95"
+              >
+                SET DISPLAY WORD
               </button>
             </div>
           </div>
