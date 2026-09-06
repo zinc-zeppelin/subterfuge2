@@ -117,6 +117,8 @@ export default function RoomPage() {
   const [godData, setGodData] = useState<any>(null);
   const [isDevActionLoading, setIsDevActionLoading] = useState(false);
   const [isStreamSafe, setIsStreamSafe] = useState(false);
+  const [isConfirmingBurn, setIsConfirmingBurn] = useState(false);
+  const [isConfirmingVerdict, setIsConfirmingVerdict] = useState(false);
 
   const decryptTimerRef = useRef<NodeJS.Timeout | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
@@ -768,10 +770,14 @@ export default function RoomPage() {
     }
   }, [gameState?.self.role]);
 
-  // Keyboard shortcut: Escape dismisses Field Manual
+  // Keyboard shortcut: Escape dismisses Field Manual & confirmation modals
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setIsManualOpen(false);
+      if (e.key === "Escape") {
+        setIsManualOpen(false);
+        setIsConfirmingBurn(false);
+        setIsConfirmingVerdict(false);
+      }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
@@ -948,33 +954,63 @@ export default function RoomPage() {
       recipientId = selectedPeerId;
     }
 
+    const contentToSend = messageInput.trim();
+    setMessageInput("");
     setIsSendingMessage(true);
+
+    // Optimistic teletype rendering
+    const tempId = `optimistic-${Date.now()}`;
+    const optimisticMessage: Message = {
+      id: tempId,
+      roomId: gameState.room.code,
+      senderId: gameState.self.id,
+      senderName: gameState.self.displayName,
+      senderApparentTeam: gameState.self.apparentTeam,
+      channelType,
+      content: contentToSend,
+      recipientId,
+      createdAt: new Date().toISOString(),
+    };
+    setMessages((prev) => [...prev, optimisticMessage]);
+    scrollToMessagesBottom(true);
+
     try {
       const res = await authFetch(`/api/rooms/${code}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           channelType,
-          content: messageInput.trim(),
+          content: contentToSend,
           recipientId,
         }),
       });
       if (res.ok) {
-        setMessageInput("");
         await fetchMessages();
         scrollToMessagesBottom(true);
       } else {
         const data = await res.json();
+        // Rollback optimistic message on error
+        setMessages((prev) => prev.filter((m) => m.id !== tempId));
+        setMessageInput(contentToSend);
         setError(data.error || "Failed to transmit message");
       }
+    } catch {
+      setMessages((prev) => prev.filter((m) => m.id !== tempId));
+      setMessageInput(contentToSend);
     } finally {
       setIsSendingMessage(false);
     }
   };
 
-  const handleBurnConversation = async () => {
+  const handleBurnConversation = () => {
+    if (!selectedPeerId || !code || isBurning) return;
+    setIsConfirmingBurn(true);
+  };
+
+  const executeBurnDM = async () => {
     if (!selectedPeerId || !code || isBurning) return;
     setIsBurning(true);
+    setIsConfirmingBurn(false);
     try {
       const res = await authFetch(`/api/rooms/${code}/messages/burn`, {
         method: "POST",
@@ -1099,9 +1135,15 @@ export default function RoomPage() {
     setSpymasterGuesses((prev) => prev.filter((w) => w !== wordToRemove));
   };
 
-  const handleSubmitVerdict = async () => {
+  const handleSubmitVerdict = () => {
+    if (!code || isSubmittingVerdict || spymasterGuesses.length === 0) return;
+    setIsConfirmingVerdict(true);
+  };
+
+  const executeSubmitVerdict = async () => {
     if (!code || isSubmittingVerdict || spymasterGuesses.length === 0) return;
     setIsSubmittingVerdict(true);
+    setIsConfirmingVerdict(false);
     setVerdictError(null);
     try {
       const res = await authFetch(`/api/rooms/${code}/verdict/submit`, {
@@ -1532,17 +1574,23 @@ export default function RoomPage() {
       {moleToast && moleToast.isMole && (
         <div
           id="mole-verification-toast"
-          className="fixed top-6 right-6 z-50 bg-emerald-950 border-2 border-emerald-500 text-emerald-300 px-6 py-4 shadow-2xl rounded font-mono text-sm flex items-center gap-3 animate-pulse"
+          className="fixed top-6 right-6 z-50 bg-emerald-950 border-2 border-emerald-500 text-emerald-300 px-6 py-4 shadow-2xl rounded font-mono text-sm flex flex-col gap-2.5 animate-pulse overflow-hidden"
         >
-          <div className="w-3 h-3 rounded-full bg-emerald-500 animate-ping" />
-          <div>
-            <div className="font-bold text-emerald-400 uppercase tracking-widest text-xs">
-              Security Handshake Confirmed
+          <div className="flex items-center gap-3">
+            <div className="w-3 h-3 rounded-full bg-emerald-500 animate-ping shrink-0" />
+            <div>
+              <div className="font-bold text-emerald-400 uppercase tracking-widest text-xs">
+                Security Handshake Confirmed
+              </div>
+              <div className="font-semibold text-white">{moleToast.message}</div>
+              <div className="text-nano text-emerald-400/70 mt-1">
+                This notification will self-destruct in 3s...
+              </div>
             </div>
-            <div className="font-semibold text-white">{moleToast.message}</div>
-            <div className="text-nano text-emerald-400/70 mt-1">
-              This notification will self-destruct in 3s...
-            </div>
+          </div>
+          {/* Visual self-destruct sweep bar */}
+          <div className="w-full bg-emerald-950 h-1 rounded-full overflow-hidden border border-emerald-900">
+            <div className="bg-emerald-400 h-full animate-shrink-width" />
           </div>
         </div>
       )}
@@ -2425,7 +2473,10 @@ export default function RoomPage() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 font-mono text-sm border-t border-carbon-800 pt-4">
               {/* Apparent Cover vs True Allegiance */}
               <div className="space-y-2">
-                <div className="text-xs text-gray-500 uppercase tracking-wider">Apparent Cover</div>
+                <div>
+                  <div className="text-xs text-gray-500 uppercase tracking-wider">Apparent Cover</div>
+                  <p className="text-nano text-gray-400 font-mono mt-0.5">Public identity displayed to opposing operatives</p>
+                </div>
                 <div className="flex items-center gap-2">
                   <span
                     id="self-apparent-team"
@@ -2441,6 +2492,7 @@ export default function RoomPage() {
 
                 <div className="pt-2">
                   <div className="text-xs text-gray-500 uppercase tracking-wider">True Allegiance</div>
+                  <p className="text-nano text-gray-400 font-mono mt-0.5 mb-2">Your actual secret mission objective</p>
                   {self.role === "MOLE" ? (
                     isDecrypted ? (
                       <div
@@ -3124,10 +3176,10 @@ export default function RoomPage() {
                     </div>
                     <button
                       onClick={() => setDismissedAlerts((prev) => ({ ...prev, [`denied_${selectedPeerId}`]: true }))}
-                      className="text-red-400 hover:text-white p-0.5 ml-2 cursor-pointer"
+                      className="min-h-[44px] min-w-[44px] flex items-center justify-center text-red-400 hover:text-white ml-2 cursor-pointer rounded"
                       aria-label="Dismiss alert"
                     >
-                      <X className="w-3.5 h-3.5" />
+                      <X className="w-4 h-4" />
                     </button>
                   </div>
                 )}
@@ -3148,10 +3200,10 @@ export default function RoomPage() {
                     </div>
                     <button
                       onClick={() => setDismissedAlerts((prev) => ({ ...prev, [`declined_${selectedPeerId}`]: true }))}
-                      className="text-amber-400 hover:text-white p-0.5 ml-2 cursor-pointer"
+                      className="min-h-[44px] min-w-[44px] flex items-center justify-center text-amber-400 hover:text-white ml-2 cursor-pointer rounded"
                       aria-label="Dismiss alert"
                     >
-                      <X className="w-3.5 h-3.5" />
+                      <X className="w-4 h-4" />
                     </button>
                   </div>
                 )}
@@ -3583,6 +3635,131 @@ export default function RoomPage() {
         </div>
       )}
 
+      {/* BURN CONVERSATION CONFIRMATION MODAL */}
+      {isConfirmingBurn && (
+        <div
+          id="burn-confirmation-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="burn-modal-title"
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-200"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setIsConfirmingBurn(false);
+          }}
+        >
+          <div className="bg-carbon-900 border-2 border-classified-crimson rounded-lg max-w-md w-full p-5 sm:p-6 shadow-2xl font-mono space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-red-950/80 border border-red-800 rounded">
+                <Flame className="w-6 h-6 text-classified-crimson" />
+              </div>
+              <div>
+                <h3 id="burn-modal-title" className="text-sm sm:text-base font-bold text-white uppercase tracking-wider">
+                  Authorize Forensic Incineration
+                </h3>
+                <span className="text-nano text-red-400 uppercase tracking-widest font-bold">
+                  DESTRUCTIVE ACTION // ZERO RECOVERY
+                </span>
+              </div>
+            </div>
+
+            <p className="text-xs text-gray-300 leading-relaxed">
+              This protocol will permanently shred and purge all encrypted telegraph logs between your station and{" "}
+              <strong className="text-white">{activePeer?.displayName || "this operative"}</strong>.
+              Incineration cannot be undone by Central Command.
+            </p>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                id="cancel-burn-btn"
+                type="button"
+                onClick={() => setIsConfirmingBurn(false)}
+                className="min-h-[44px] px-4 py-2 bg-carbon-800 hover:bg-carbon-700 text-white rounded font-mono uppercase text-xs tracking-wider transition-colors cursor-pointer"
+              >
+                ABORT // KEEP LOGS
+              </button>
+              <button
+                id="confirm-burn-btn"
+                type="button"
+                onClick={executeBurnDM}
+                className="min-h-[44px] px-4 py-2 bg-red-950 hover:bg-red-900 text-red-300 border border-red-800 rounded font-mono font-bold uppercase text-xs tracking-wider transition-colors flex items-center gap-1.5 cursor-pointer active:scale-95"
+              >
+                <Flame className="w-4 h-4 text-red-400" />
+                EXECUTE INCINERATION
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* VERDICT AUTHENTICATION CONFIRMATION MODAL (TWO-MAN RULE) */}
+      {isConfirmingVerdict && (
+        <div
+          id="verdict-confirmation-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="verdict-modal-title"
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-200"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setIsConfirmingVerdict(false);
+          }}
+        >
+          <div className="bg-carbon-900 border-2 border-classified-amber rounded-lg max-w-lg w-full p-5 sm:p-6 shadow-2xl font-mono space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-amber-950/80 border border-amber-800 rounded">
+                <Lock className="w-6 h-6 text-classified-amber" />
+              </div>
+              <div>
+                <h3 id="verdict-modal-title" className="text-sm sm:text-base font-bold text-white uppercase tracking-wider">
+                  Two-Man Rule // Final Lock-In
+                </h3>
+                <span className="text-nano text-classified-amber uppercase tracking-widest font-bold">
+                  OFFICIAL SPYMASTER TRANSMISSION
+                </span>
+              </div>
+            </div>
+
+            <p className="text-xs text-gray-300 leading-relaxed">
+              You are about to transmit the official intelligence verdict for the{" "}
+              <strong className="text-white">{self.apparentTeam} FACTION</strong>. Once transmitted, your code word deductions and mole indictment are permanently locked into Central Command.
+            </p>
+
+            {/* Verdict Summary Review */}
+            <div className="bg-carbon-950 border border-carbon-800 rounded p-3 space-y-2 text-xs">
+              <div className="flex justify-between items-center border-b border-carbon-800 pb-1.5">
+                <span className="text-gray-500 uppercase tracking-wider">Target Words ({spymasterGuesses.length}):</span>
+                <span className="text-classified-amber font-bold">{spymasterGuesses.join(", ")}</span>
+              </div>
+              <div className="flex justify-between items-center pt-0.5">
+                <span className="text-gray-500 uppercase tracking-wider">Indicted Mole:</span>
+                <span className={moleIndictmentId ? "text-classified-crimson font-bold" : "text-gray-400 font-bold"}>
+                  {moleIndictmentId ? (players.find((p) => p.id === moleIndictmentId)?.displayName || "DECLARED") : "NONE DECLARED"}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                id="cancel-verdict-btn"
+                type="button"
+                onClick={() => setIsConfirmingVerdict(false)}
+                className="min-h-[44px] px-4 py-2 bg-carbon-800 hover:bg-carbon-700 text-white rounded font-mono uppercase text-xs tracking-wider transition-colors cursor-pointer"
+              >
+                REVIEW VERDICT
+              </button>
+              <button
+                id="confirm-verdict-btn"
+                type="button"
+                onClick={executeSubmitVerdict}
+                className="min-h-[44px] px-4 py-2 bg-classified-amber text-black hover:bg-amber-400 font-mono font-bold uppercase text-xs tracking-wider rounded transition-colors flex items-center gap-1.5 cursor-pointer active:scale-95"
+              >
+                <Lock className="w-4 h-4" />
+                AUTHENTICATE & TRANSMIT
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* INCOMING DM NOTIFICATION TOAST */}
       {dmAlert && (
         <div
@@ -3602,9 +3779,10 @@ export default function RoomPage() {
                 e.stopPropagation();
                 setDmAlert(null);
               }}
-              className="text-gray-400 hover:text-white p-0.5"
+              className="min-h-[44px] min-w-[44px] flex items-center justify-center text-gray-400 hover:text-white cursor-pointer rounded"
+              aria-label="Dismiss transmission alert"
             >
-              <X className="w-3.5 h-3.5" />
+              <X className="w-4 h-4" />
             </button>
           </div>
           <div className="text-xs text-white font-bold mb-0.5">{dmAlert.senderName}</div>

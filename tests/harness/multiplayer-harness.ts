@@ -247,6 +247,10 @@ export class SixPlayerHarness {
   public async burnDM(playerIndex: number): Promise<void> {
     const op = this.sessions[playerIndex];
     await op.page.click("#burn-dm-btn");
+    const confirmBtn = op.page.locator("#confirm-burn-btn");
+    if (await confirmBtn.isVisible({ timeout: 1500 }).catch(() => false)) {
+      await confirmBtn.click();
+    }
   }
 
   /**
@@ -373,6 +377,10 @@ export class SixPlayerHarness {
   public async spymasterSubmitVerdict(playerIndex: number): Promise<void> {
     const op = this.sessions[playerIndex];
     await op.page.click("#lock-in-verdict-btn");
+    const confirmBtn = op.page.locator("#confirm-verdict-btn");
+    if (await confirmBtn.isVisible({ timeout: 1500 }).catch(() => false)) {
+      await confirmBtn.click();
+    }
   }
 
   /**

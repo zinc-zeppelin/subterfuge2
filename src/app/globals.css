@@ -98,3 +98,15 @@ html {
   transition: width 2s linear;
 }
 
+@keyframes shrinkWidth {
+  from {
+    width: 100%;
+  }
+  to {
+    width: 0%;
+  }
+}
+
+.animate-shrink-width {
+  animation: shrinkWidth 3s linear forwards;
+}
