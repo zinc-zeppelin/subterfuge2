@@ -73,6 +73,9 @@ test.describe("Slice 13: Playtesting Enhancements & Dev Mode Controls", () => {
     // Mole screen displays symmetrical cover identity matching innocent teammates (AGENT)!
     await expect(molePage.locator("#self-role")).toHaveText("AGENT");
     await expect(molePage.locator("#self-word-redacted")).toBeVisible();
+    // Verify no decoy tells exist on screen
+    await expect(molePage.getByText("DECOY WORD:")).not.toBeVisible();
+    await expect(molePage.getByText("SET CAMOUFLAGE")).not.toBeVisible();
 
     // Press and Hold Decrypt: Reveals assigned word, but role remains AGENT (zero mole tell!)
     await molePage.dispatchEvent("#decrypt-word-btn", "mousedown");
@@ -90,6 +93,14 @@ test.describe("Slice 13: Playtesting Enhancements & Dev Mode Controls", () => {
     await molePage.fill("#spoof-word-input", "DECOYWORD");
     await molePage.click("#save-spoof-word-btn");
     await expect(molePage.locator("#spoof-word-modal")).not.toBeVisible();
+
+    // STRICT ANTI-TELL CHECK: Resting screen must be 100% IDENTICAL before and after decoy applied!
+    await expect(molePage.locator("#self-role")).toHaveText("AGENT");
+    await expect(molePage.locator("#self-word-redacted")).toBeVisible();
+    await expect(molePage.getByText("DECOY WORD:")).not.toBeVisible();
+    await expect(molePage.getByText("DECOY:")).not.toBeVisible();
+    await expect(molePage.getByText("SET CAMOUFLAGE")).not.toBeVisible();
+    await expect(molePage.locator("#configure-spoof-word-btn")).not.toContainText("DECOY");
 
     // Press and Hold Decrypt: Now reveals DECOYWORD with zero visual tell!
     await molePage.dispatchEvent("#decrypt-word-btn", "mousedown");

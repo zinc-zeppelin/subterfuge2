@@ -33,6 +33,7 @@ import {
   Link as LinkIcon,
   KeyRound,
   Bell,
+  Pencil,
 } from "lucide-react";
 
 export default function RoomPage() {
@@ -2591,9 +2592,24 @@ export default function RoomPage() {
                     <span className="text-xs text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
                       <Lock className="w-3.5 h-3.5 text-classified-amber" /> Secret Code Word
                     </span>
-                    <span className="text-nano text-gray-500 uppercase">
-                      {isDecrypted ? "DECRYPTED" : "REDACTED"}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-nano text-gray-500 uppercase">
+                        {isDecrypted ? "DECRYPTED" : "REDACTED"}
+                      </span>
+                      <button
+                        id="configure-spoof-word-btn"
+                        type="button"
+                        onClick={() => {
+                          setSpoofModalInput(spoofWord || "");
+                          setIsSpoofModalOpen(true);
+                        }}
+                        aria-label="Edit Code Word"
+                        title="Edit Code Word"
+                        className="text-gray-500 hover:text-classified-amber p-1 rounded transition-colors cursor-pointer min-w-[28px] min-h-[28px] flex items-center justify-center"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
 
                   <div className="py-2 min-h-[40px] flex items-center">
@@ -2681,25 +2697,6 @@ export default function RoomPage() {
                       </>
                     )}
                   </button>
-
-                  {/* Camouflage Spoof Word Quick Control */}
-                  <div className="pt-2 border-t border-carbon-800 flex items-center justify-between">
-                    <span className="text-nano text-gray-500 uppercase tracking-wider">
-                      DECOY WORD:
-                    </span>
-                    <button
-                      id="configure-spoof-word-btn"
-                      type="button"
-                      onClick={() => {
-                        setSpoofModalInput(spoofWord || "");
-                        setIsSpoofModalOpen(true);
-                      }}
-                      className="text-nano text-gray-400 hover:text-classified-amber flex items-center gap-1 font-mono uppercase px-2 py-1 bg-carbon-900 hover:bg-carbon-850 border border-carbon-700 rounded transition-colors cursor-pointer min-h-[32px]"
-                    >
-                      <Shield className="w-3 h-3 text-classified-amber" />
-                      <span>{spoofWord ? `DECOY: ${spoofWord}` : "SET CAMOUFLAGE"}</span>
-                    </button>
-                  </div>
                 </div>
               </div>
             </div>
@@ -3971,7 +3968,7 @@ export default function RoomPage() {
         </div>
       )}
 
-      {/* CAMOUFLAGE / SPOOF DISPLAY WORD CONFIGURATION MODAL */}
+      {/* STATION CODE WORD CONFIGURATION MODAL */}
       {isSpoofModalOpen && (
         <div
           id="spoof-word-modal"
@@ -3983,30 +3980,28 @@ export default function RoomPage() {
             if (e.target === e.currentTarget) setIsSpoofModalOpen(false);
           }}
         >
-          <div className="bg-carbon-900 border-2 border-classified-amber rounded-lg max-w-md w-full p-5 sm:p-6 shadow-2xl font-mono space-y-4">
+          <div className="bg-carbon-900 border-2 border-carbon-700 rounded-lg max-w-md w-full p-5 sm:p-6 shadow-2xl font-mono space-y-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-amber-950/80 border border-amber-800 rounded">
-                <Shield className="w-6 h-6 text-classified-amber" />
+              <div className="p-2 bg-carbon-950 border border-carbon-800 rounded">
+                <Lock className="w-5 h-5 text-classified-amber" />
               </div>
               <div>
                 <h3 id="spoof-modal-title" className="text-sm sm:text-base font-bold text-white uppercase tracking-wider">
-                  Tactical Decoy // Display Word
+                  Station Code Word
                 </h3>
-                <span className="text-nano text-classified-amber uppercase tracking-widest font-bold">
-                  ZERO VISUAL TELL // ANTI-COERCION
+                <span className="text-nano text-gray-500 uppercase tracking-widest font-bold">
+                  TERMINAL RECORD
                 </span>
               </div>
             </div>
 
             <p className="text-xs text-gray-300 leading-relaxed">
-              Configure the code word to display on this station when holding to decrypt. This allows you to feed
-              false intelligence or protect your authentic word against physical screen inspections. The display word
-              will render with <strong className="text-white">ZERO visual tells</strong>.
+              Verify or update the operational code word assigned to this station.
             </p>
 
             <div className="space-y-1.5">
               <label htmlFor="spoof-word-input" className="block text-micro text-gray-400 uppercase tracking-wider font-bold">
-                Display Code Word:
+                Assigned Code Word:
               </label>
               <input
                 id="spoof-word-input"
@@ -4018,7 +4013,7 @@ export default function RoomPage() {
                 onKeyDown={(e) => {
                   if (e.key === "Enter") handleSaveSpoofWord();
                 }}
-                placeholder="ENTER DISPLAY CODE WORD"
+                placeholder="ENTER CODE WORD"
                 className="w-full bg-carbon-950 border border-carbon-700 focus:border-classified-amber text-white font-mono text-sm uppercase tracking-widest px-3 py-2.5 rounded outline-none"
               />
             </div>
@@ -4038,7 +4033,7 @@ export default function RoomPage() {
                 onClick={handleSaveSpoofWord}
                 className="min-h-[44px] px-4 py-2 bg-classified-amber text-black hover:bg-amber-400 font-mono font-bold uppercase text-xs tracking-wider rounded transition-colors cursor-pointer active:scale-95"
               >
-                SET DISPLAY WORD
+                CONFIRM CODE WORD
               </button>
             </div>
           </div>
