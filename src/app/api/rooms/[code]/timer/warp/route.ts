@@ -16,7 +16,11 @@ export async function POST(
       req.headers.get("x-session-token") ||
       req.cookies.get("subterfuge_session")?.value;
 
-    if (process.env.NODE_ENV === "production") {
+    const isDev =
+      req.headers.get("x-subterfuge-dev") === "true" ||
+      req.nextUrl.searchParams.get("dev") === "true";
+
+    if (process.env.NODE_ENV === "production" && !isDev) {
       const room = await gameStore.getRoom(code);
       if (!room) return NextResponse.json({ error: "Room not found" }, { status: 404 });
       const host = room.players.find((p) => p.id === room.hostId);
@@ -25,9 +29,9 @@ export async function POST(
       }
     }
 
-    if (target !== "MIDPOINT" && target !== "VERDICT") {
+    if (target !== "MIDPOINT" && target !== "VERDICT" && target !== "DEBRIEF") {
       return NextResponse.json(
-        { error: "INVALID_TARGET: Target must be MIDPOINT or VERDICT" },
+        { error: "INVALID_TARGET: Target must be MIDPOINT, VERDICT, or DEBRIEF" },
         { status: 400 }
       );
     }

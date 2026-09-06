@@ -482,7 +482,7 @@ class GameStore {
           createdAt: c.createdAt,
         })),
       challengeStatuses: (() => {
-        const statuses: Record<string, "PENDING" | "ACCEPTED" | "DENIED"> = {};
+        const statuses: Record<string, "PENDING" | "ACCEPTED" | "DENIED" | "DECLINED"> = {};
         (data.challenges[upperCode] || [])
           .filter((c) => c.requesterId === self.id)
           .forEach((c) => {
@@ -585,6 +585,11 @@ class GameStore {
         return false;
       }
 
+      // Check if caller has burned this message
+      if (m.burnedBy && m.burnedBy.includes(caller.id)) {
+        return false;
+      }
+
       // 2. Authorization check per message
       if (m.channelType === "PUBLIC") {
         return true;
@@ -624,19 +629,34 @@ class GameStore {
     if (!caller) throw new Error("UNAUTHORIZED: Invalid operative session");
 
     const allMessages = data.messages[upperCode] || [];
-    const initialCount = allMessages.length;
+    let burnedCount = 0;
 
+    // Unilateral burn: Mark messages as burned by caller.
+    // If all participants have burned the message, delete it permanently from storage.
     data.messages[upperCode] = allMessages.filter((m) => {
       if (m.channelType !== "DM") return true;
       const isBetweenPair =
         (m.senderId === caller.id && m.recipientId === params.peerId) ||
         (m.senderId === params.peerId && m.recipientId === caller.id);
-      return !isBetweenPair;
+
+      if (!isBetweenPair) return true;
+
+      if (!m.burnedBy) {
+        m.burnedBy = [];
+      }
+      if (!m.burnedBy.includes(caller.id)) {
+        m.burnedBy.push(caller.id);
+        burnedCount++;
+      }
+
+      // If both participants (sender and recipient) have burned it, prune from storage
+      const otherParticipantId = m.senderId === caller.id ? m.recipientId : m.senderId;
+      const bothBurned = otherParticipantId && m.burnedBy.includes(otherParticipantId);
+      return !bothBurned;
     });
 
-    const deletedCount = initialCount - data.messages[upperCode].length;
     await this.save(data);
-    return { success: true, count: deletedCount };
+    return { success: true, count: burnedCount };
   }
 
   public async initiateMoleChallenge(params: {
@@ -722,9 +742,9 @@ class GameStore {
     }
 
     if (params.action === "DENY") {
-      challenge.status = "DENIED";
+      challenge.status = "DECLINED";
       await this.save(data);
-      return { success: false, isMole: false, message: "Clearance Denied: Counter-signature declined" };
+      return { success: false, isMole: false, message: "Clearance Declined: Counter-signature declined" };
     }
 
     const requester = room.players.find((p) => p.id === challenge.requesterId);
@@ -770,7 +790,7 @@ class GameStore {
     return (data.moleVerifications[upperCode] || []).filter((v) => v.requesterId === caller.id);
   }
 
-  public async warpTimer(params: { code: string; target: "MIDPOINT" | "VERDICT" }): Promise<Room> {
+  public async warpTimer(params: { code: string; target: "MIDPOINT" | "VERDICT" | "DEBRIEF" }): Promise<Room> {
     const data = await this.load();
     const upperCode = params.code.toUpperCase();
     const room = data.rooms[upperCode];
@@ -790,7 +810,142 @@ class GameStore {
       room.phase = "VERDICT";
       const verdictMs = (room.verdictDurationMinutes || 60) * 60 * 1000;
       room.verdictEndTime = new Date(now.getTime() + verdictMs).toISOString();
+    } else if (params.target === "DEBRIEF") {
+      if (room.phase === "LOBBY") {
+        throw new Error("CANNOT_WARP: Cannot warp to DEBRIEF before starting operation");
+      }
+      room.startTime = new Date(now.getTime() - durationMs - 4000).toISOString();
+      room.midpointTime = new Date(now.getTime() - durationMs / 2).toISOString();
+      room.endTime = new Date(now.getTime() - 4000).toISOString();
+      room.verdictEndTime = new Date(now.getTime() - 2000).toISOString();
+      room.phase = "DEBRIEF";
+
+      if (!room.verdicts) {
+        room.verdicts = { RED: undefined as any, BLUE: undefined as any };
+      }
+
+      const allAssignedWords = room.players.map((p) => p.assignedWord).filter(Boolean) as string[];
+      const redSpymaster =
+        room.players.find((p) => p.apparentTeam === "RED" && p.role === "SPYMASTER") ||
+        room.players.find((p) => p.apparentTeam === "RED");
+      const blueSpymaster =
+        room.players.find((p) => p.apparentTeam === "BLUE" && p.role === "SPYMASTER") ||
+        room.players.find((p) => p.apparentTeam === "BLUE");
+      const blueMole = room.players.find((p) => p.actualTeam === "BLUE" && p.role === "MOLE");
+      const redMole = room.players.find((p) => p.actualTeam === "RED" && p.role === "MOLE");
+
+      if (!room.verdicts["RED"] && redSpymaster) {
+        room.verdicts["RED"] = {
+          team: "RED",
+          submittedBy: redSpymaster.id,
+          submittedByName: redSpymaster.displayName,
+          guesses: allAssignedWords.slice(0, Math.min(room.players.length, allAssignedWords.length)),
+          moleIndictmentId: redMole?.id,
+          moleIndictmentName: redMole?.displayName,
+          score: allAssignedWords.length,
+          correctGuesses: [...allAssignedWords],
+          submittedAt: new Date().toISOString(),
+        };
+      }
+
+      if (!room.verdicts["BLUE"] && blueSpymaster) {
+        room.verdicts["BLUE"] = {
+          team: "BLUE",
+          submittedBy: blueSpymaster.id,
+          submittedByName: blueSpymaster.displayName,
+          guesses: allAssignedWords.slice(0, Math.min(room.players.length, allAssignedWords.length)),
+          moleIndictmentId: blueMole?.id,
+          moleIndictmentName: blueMole?.displayName,
+          score: allAssignedWords.length,
+          correctGuesses: [...allAssignedWords],
+          submittedAt: new Date().toISOString(),
+        };
+      }
+
+      const redScore = room.verdicts["RED"]?.score || 0;
+      const blueScore = room.verdicts["BLUE"]?.score || 0;
+      if (redScore > blueScore) room.winner = "RED";
+      else if (blueScore > redScore) room.winner = "BLUE";
+      else room.winner = "DRAW";
     }
+
+    await this.save(data);
+    return room;
+  }
+
+  public async devFillBots(params: { code: string }): Promise<Room> {
+    const data = await this.load();
+    const upperCode = params.code.toUpperCase();
+    const room = data.rooms[upperCode];
+    if (!room) throw new Error("Room not found");
+    if (room.phase !== "LOBBY") {
+      throw new Error("CANNOT_FILL_BOTS: Can only fill bots in LOBBY phase");
+    }
+
+    const botNames = [
+      "Agent-Bravo",
+      "Agent-Charlie",
+      "Agent-Delta",
+      "Agent-Echo",
+      "Agent-Foxtrot",
+      "Agent-Golf",
+      "Agent-Hotel",
+    ];
+
+    const currentCount = room.players.length;
+    const needed = Math.max(0, 6 - currentCount);
+
+    for (let i = 0; i < needed; i++) {
+      const existingNames = new Set(room.players.map((p) => p.displayName.toLowerCase()));
+      const availableName =
+        botNames.find((n) => !existingNames.has(n.toLowerCase())) || `Operative-${Date.now() % 1000}`;
+      const botToken = randomUUID();
+      const botId = randomUUID();
+      const bot: Player = {
+        id: botId,
+        roomId: room.id,
+        sessionToken: botToken,
+        displayName: availableName,
+        isReady: true,
+        isHost: false,
+        createdAt: new Date().toISOString(),
+      };
+      room.players.push(bot);
+      data.sessions[botToken] = { roomCode: upperCode, playerId: botId };
+    }
+
+    await this.save(data);
+    return room;
+  }
+
+  public async devResetToLobby(params: { code: string }): Promise<Room> {
+    const data = await this.load();
+    const upperCode = params.code.toUpperCase();
+    const room = data.rooms[upperCode];
+    if (!room) throw new Error("Room not found");
+
+    room.phase = "LOBBY";
+    room.selectedTheme = undefined;
+    room.codebook = undefined;
+    room.startTime = undefined;
+    room.midpointTime = undefined;
+    room.endTime = undefined;
+    room.verdictEndTime = undefined;
+    room.verdicts = undefined;
+    room.suggestions = undefined;
+    room.winner = undefined;
+
+    for (const player of room.players) {
+      player.isReady = false;
+      player.apparentTeam = undefined;
+      player.actualTeam = undefined;
+      player.role = undefined;
+      player.assignedWord = undefined;
+    }
+
+    data.messages[upperCode] = [];
+    data.challenges[upperCode] = [];
+    data.moleVerifications[upperCode] = [];
 
     await this.save(data);
     return room;

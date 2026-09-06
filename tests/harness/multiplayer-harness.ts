@@ -154,13 +154,16 @@ export class SixPlayerHarness {
     // Initially word should be redacted
     await expect(op.page.locator("#self-word-redacted")).toBeVisible();
 
-    // Click decrypt button
-    await op.page.click("#decrypt-word-btn");
+    // Press hold-to-decrypt button
+    await op.page.dispatchEvent("#decrypt-word-btn", "mousedown");
 
     // Decrypted word should appear
     const wordLocator = op.page.locator("#self-assigned-word");
     await expect(wordLocator).toBeVisible();
     const word = await wordLocator.innerText();
+
+    // Release button
+    await op.page.dispatchEvent("#decrypt-word-btn", "mouseup");
     return word.trim();
   }
 
@@ -174,8 +177,14 @@ export class SixPlayerHarness {
   }> {
     const op = this.sessions[playerIndex];
     const apparentText = await op.page.locator("#self-apparent-team").innerText();
-    const actualText = await op.page.locator("#self-actual-team").innerText();
-    const roleText = await op.page.locator("#self-role").innerText();
+    const actualEl = op.page.locator("#self-actual-team");
+    const roleEl = op.page.locator("#self-role");
+
+    const actualAttr = await actualEl.getAttribute("data-actual-team");
+    const actualText = actualAttr || (await actualEl.innerText());
+
+    const roleAttr = await roleEl.getAttribute("data-actual-role");
+    const roleText = roleAttr || (await roleEl.innerText());
 
     return {
       apparentTeam: apparentText.includes("RED") ? "RED" : "BLUE",

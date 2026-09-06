@@ -94,6 +94,27 @@ export default function RoomPage() {
   const [showTokenFormInLobby, setShowTokenFormInLobby] = useState(false);
   const [hasSavedSession, setHasSavedSession] = useState(false);
 
+  // Unread Channels & Notification State
+  const [lastReadTimestamps, setLastReadTimestamps] = useState<Record<string, number>>({
+    PUBLIC: Date.now(),
+    TEAM: Date.now(),
+    DM: Date.now(),
+  });
+  const [dmAlert, setDmAlert] = useState<{
+    senderId: string;
+    senderName: string;
+    preview: string;
+  } | null>(null);
+  const [dismissedAlerts, setDismissedAlerts] = useState<Record<string, boolean>>({});
+  const prevMessagesRef = useRef<Message[]>([]);
+  const hasFetchedInitialMessagesRef = useRef(false);
+
+  // Dev Mode & Playtesting State
+  const [isDevMode, setIsDevMode] = useState(false);
+  const [isGodMode, setIsGodMode] = useState(false);
+  const [godData, setGodData] = useState<any>(null);
+  const [isDevActionLoading, setIsDevActionLoading] = useState(false);
+
   const decryptTimerRef = useRef<NodeJS.Timeout | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -280,14 +301,90 @@ export default function RoomPage() {
     }
   }, [code, authFetch, getSessionToken]);
 
+  const activeTabRef = useRef(activeTab);
+  activeTabRef.current = activeTab;
+  const selectedPeerIdRef = useRef(selectedPeerId);
+  selectedPeerIdRef.current = selectedPeerId;
+  const selfIdRef = useRef(gameState?.self?.id);
+  selfIdRef.current = gameState?.self?.id;
+
   const fetchMessages = useCallback(async () => {
     if (!code) return;
     try {
       const res = await authFetch(`/api/rooms/${code}/messages`);
       if (res.ok) {
         const data = await res.json();
-        setMessages(data.messages || []);
+        const newMessages: Message[] = data.messages || [];
+        setMessages(newMessages);
+
+        if (!hasFetchedInitialMessagesRef.current) {
+          hasFetchedInitialMessagesRef.current = true;
+          prevMessagesRef.current = newMessages;
+        } else {
+          // Detect brand new incoming messages for background Push Notification and in-page alert
+          const prevIds = new Set(prevMessagesRef.current.map((m) => m.id));
+          const brandNew = newMessages.filter((m) => !prevIds.has(m.id));
+
+          if (brandNew.length > 0) {
+            const currentSelfId = selfIdRef.current;
+            const currentTab = activeTabRef.current;
+            const currentPeerId = selectedPeerIdRef.current;
+
+          for (const msg of brandNew) {
+            if (msg.senderId !== currentSelfId) {
+              // Push notification if in background
+              if (
+                typeof window !== "undefined" &&
+                "Notification" in window &&
+                Notification.permission === "granted" &&
+                document.hidden
+              ) {
+                try {
+                  const notifTitle =
+                    msg.channelType === "DM"
+                      ? `[Subterfuge DM] ${msg.senderName}`
+                      : msg.channelType.startsWith("TEAM")
+                      ? `[Subterfuge Radio] ${msg.senderName}`
+                      : `[Subterfuge Wire] ${msg.senderName}`;
+                  const notif = new Notification(notifTitle, {
+                    body: msg.content,
+                    tag: msg.id,
+                  });
+                  notif.onclick = () => {
+                    window.focus();
+                    if (msg.channelType === "DM") {
+                      setActiveTab("DM");
+                      setSelectedPeerId(msg.senderId);
+                    } else if (msg.channelType.startsWith("TEAM")) {
+                      setActiveTab("TEAM");
+                    } else {
+                      setActiveTab("PUBLIC");
+                    }
+                    notif.close();
+                  };
+                } catch {
+                  // Ignore notification error
+                }
+              }
+
+              // In-page clickable transmission alert for DMs
+              if (
+                msg.channelType === "DM" &&
+                msg.recipientId === currentSelfId &&
+                (currentTab !== "DM" || currentPeerId !== msg.senderId)
+              ) {
+                setDmAlert({
+                  senderId: msg.senderId,
+                  senderName: msg.senderName,
+                  preview: msg.content.length > 60 ? msg.content.slice(0, 60) + "..." : msg.content,
+                });
+              }
+            }
+          }
+        }
       }
+      prevMessagesRef.current = newMessages;
+    }
     } catch {
       // Ignore polling errors
     }
@@ -371,19 +468,21 @@ export default function RoomPage() {
     setIsUnauthorized(true);
   };
 
+  const hasGameSession = !!gameState?.self?.id;
+
   useEffect(() => {
     fetchState();
   }, [fetchState]);
 
   useEffect(() => {
-    if (!gameState) return;
+    if (!hasGameSession) return;
     fetchMessages();
     const interval = setInterval(() => {
       fetchState();
       fetchMessages();
     }, 2000);
     return () => clearInterval(interval);
-  }, [gameState, fetchState, fetchMessages]);
+  }, [hasGameSession, fetchState, fetchMessages]);
 
   useEffect(() => {
     return () => {
@@ -434,6 +533,70 @@ export default function RoomPage() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
+
+  // Dev mode initialization from query param or localStorage
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("dev") === "true" || localStorage.getItem("subterfuge_dev") === "true") {
+        setIsDevMode(true);
+      }
+    }
+  }, []);
+
+  // Keyboard shortcut: Ctrl+Shift+D or Cmd+Shift+D toggles Dev Mode
+  useEffect(() => {
+    const handleDevKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "d") {
+        e.preventDefault();
+        setIsDevMode((prev) => {
+          const next = !prev;
+          if (typeof window !== "undefined") {
+            if (next) localStorage.setItem("subterfuge_dev", "true");
+            else localStorage.removeItem("subterfuge_dev");
+          }
+          return next;
+        });
+      }
+    };
+    window.addEventListener("keydown", handleDevKeyDown);
+    return () => window.removeEventListener("keydown", handleDevKeyDown);
+  }, []);
+
+  // Web Notifications API permission request
+  useEffect(() => {
+    if (
+      typeof window !== "undefined" &&
+      "Notification" in window &&
+      Notification.permission === "default" &&
+      gameState?.room?.phase &&
+      gameState.room.phase !== "LOBBY"
+    ) {
+      Notification.requestPermission().catch(() => {});
+    }
+  }, [gameState?.room?.phase]);
+
+  // Auto-dismiss for incoming DM toast
+  useEffect(() => {
+    if (!dmAlert) return;
+    const timer = setTimeout(() => {
+      setDmAlert(null);
+    }, 8000);
+    return () => clearTimeout(timer);
+  }, [dmAlert]);
+
+  // Auto-dismiss for clearance challenge status alerts (DENIED / DECLINED)
+  useEffect(() => {
+    if (!selectedPeerId || !gameState?.challengeStatuses?.[selectedPeerId]) return;
+    const status = gameState.challengeStatuses[selectedPeerId];
+    if (status === "DENIED" || status === "DECLINED") {
+      const key = `${status.toLowerCase()}_${selectedPeerId}`;
+      const timer = setTimeout(() => {
+        setDismissedAlerts((prev) => ({ ...prev, [key]: true }));
+      }, 7000);
+      return () => clearTimeout(timer);
+    }
+  }, [selectedPeerId, gameState?.challengeStatuses]);
 
   const handleToggleReady = async () => {
     if (!gameState || !code || isTogglingReady) return;
@@ -605,11 +768,18 @@ export default function RoomPage() {
         setMoleToast({ message: data.message || "Operative Verified. Channel Secured.", isMole: true });
         setTimeout(() => setMoleToast(null), 3000);
       } else {
-        setMoleToast({
-          message: data.message || "Clearance Denied: Invalid Counter-Signature",
-          isMole: false,
-        });
-        setTimeout(() => setMoleToast(null), 3000);
+        if (action === "DENY") {
+          setMoleToast({
+            message: "Clearance Declined: You have declined the verification request.",
+            isMole: false,
+          });
+        } else {
+          setMoleToast({
+            message: data.message || "Clearance Denied: Invalid Counter-Signature",
+            isMole: false,
+          });
+        }
+        setTimeout(() => setMoleToast(null), 4000);
       }
       await fetchState();
     } catch (e) {
@@ -724,17 +894,18 @@ export default function RoomPage() {
 
   const handleDecryptStart = () => {
     setIsDecrypted(true);
-    if (decryptTimerRef.current) clearTimeout(decryptTimerRef.current);
-    decryptTimerRef.current = setTimeout(() => {
-      setIsDecrypted(false);
-    }, 4000);
+    if (decryptTimerRef.current) {
+      clearTimeout(decryptTimerRef.current);
+      decryptTimerRef.current = null;
+    }
   };
 
   const handleDecryptEnd = () => {
-    if (decryptTimerRef.current) clearTimeout(decryptTimerRef.current);
-    decryptTimerRef.current = setTimeout(() => {
-      setIsDecrypted(false);
-    }, 1500);
+    if (decryptTimerRef.current) {
+      clearTimeout(decryptTimerRef.current);
+      decryptTimerRef.current = null;
+    }
+    setIsDecrypted(false);
   };
 
   if (error) {
@@ -1177,9 +1348,9 @@ export default function RoomPage() {
             </div>
           )}
 
-          <div className="flex items-center gap-2">
+          <div id="operatives-count-display" className="flex items-center gap-2">
             <Users className="w-4 h-4 text-gray-500" />
-            <span>OPERATIVES: <strong className="text-white">{players.length}/12</strong></span>
+            <span>OPERATIVES: <strong className="text-white">{players.length}</strong></span>
           </div>
           <div className="flex items-center gap-2">
             <Clock className="w-4 h-4 text-gray-500" />
@@ -1977,14 +2148,44 @@ export default function RoomPage() {
 
                 <div className="pt-2">
                   <div className="text-xs text-gray-500 uppercase tracking-wider">True Allegiance</div>
-                  <div
-                    id="self-actual-team"
-                    className={`font-bold tracking-wider text-xs uppercase ${
-                      self.actualTeam === "RED" ? "text-red-400" : "text-blue-400"
-                    }`}
-                  >
-                    LOYAL TO {self.actualTeam} TEAM
-                  </div>
+                  {self.role === "MOLE" ? (
+                    isDecrypted ? (
+                      <div
+                        id="self-actual-team"
+                        data-actual-team={self.actualTeam}
+                        data-apparent-team={self.apparentTeam}
+                        className={`font-bold tracking-wider text-xs uppercase flex items-center gap-1.5 ${
+                          self.actualTeam === "RED" ? "text-red-400" : "text-blue-400"
+                        }`}
+                      >
+                        <span>LOYAL TO {self.actualTeam} TEAM</span>
+                        <span className="text-[9px] bg-red-950 text-red-400 border border-red-800 px-1 py-0.5 rounded font-bold animate-pulse">
+                          SLEEPER
+                        </span>
+                      </div>
+                    ) : (
+                      <div
+                        id="self-actual-team"
+                        data-actual-team={self.actualTeam}
+                        data-apparent-team={self.apparentTeam}
+                        className={`font-bold tracking-wider text-xs uppercase ${
+                          self.apparentTeam === "RED" ? "text-red-400" : "text-blue-400"
+                        }`}
+                      >
+                        LOYAL TO {self.apparentTeam} TEAM
+                      </div>
+                    )
+                  ) : (
+                    <div
+                      id="self-actual-team"
+                      data-actual-team={self.actualTeam}
+                      className={`font-bold tracking-wider text-xs uppercase ${
+                        self.actualTeam === "RED" ? "text-red-400" : "text-blue-400"
+                      }`}
+                    >
+                      LOYAL TO {self.actualTeam} TEAM
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1992,24 +2193,45 @@ export default function RoomPage() {
               <div className="space-y-2">
                 <div className="text-xs text-gray-500 uppercase tracking-wider">Assigned Role</div>
                 <div className="flex items-center gap-2">
-                  <span
-                    id="self-role"
-                    className={`px-3 py-1 rounded text-xs font-bold uppercase tracking-wider border ${
-                      self.role === "SPYMASTER"
-                        ? "bg-amber-950/60 border-amber-600 text-amber-400"
-                        : self.role === "MOLE"
-                        ? "bg-purple-950/60 border-purple-600 text-purple-400"
-                        : "bg-carbon-800 border-carbon-600 text-gray-300"
-                    }`}
-                  >
-                    {self.role}
-                  </span>
+                  {self.role === "MOLE" ? (
+                    isDecrypted ? (
+                      <span
+                        id="self-role"
+                        data-actual-role={self.role}
+                        className="px-3 py-1 rounded text-xs font-bold uppercase tracking-wider border bg-purple-950/60 border-purple-600 text-purple-400"
+                      >
+                        MOLE
+                      </span>
+                    ) : (
+                      <span
+                        id="self-role"
+                        data-actual-role={self.role}
+                        className="px-3 py-1 rounded text-xs font-bold uppercase tracking-wider border bg-carbon-800 border-carbon-600 text-gray-300"
+                      >
+                        AGENT
+                      </span>
+                    )
+                  ) : (
+                    <span
+                      id="self-role"
+                      data-actual-role={self.role}
+                      className={`px-3 py-1 rounded text-xs font-bold uppercase tracking-wider border ${
+                        self.role === "SPYMASTER"
+                          ? "bg-amber-950/60 border-amber-600 text-amber-400"
+                          : "bg-carbon-800 border-carbon-600 text-gray-300"
+                      }`}
+                    >
+                      {self.role}
+                    </span>
+                  )}
                 </div>
                 <p className="text-xs text-gray-400 font-mono pt-1">
                   {self.role === "SPYMASTER" &&
                     "Operation Commander. Holds exclusive lock-in authority on your team's final verdict."}
                   {self.role === "MOLE" &&
-                    "Covert Traitor. Infiltrate enemy radio channels and secretly transmit intelligence to your true faction."}
+                    (isDecrypted
+                      ? "Covert Traitor. Infiltrate enemy radio channels and secretly transmit intelligence to your true faction."
+                      : "Field Operative. Protect your code word, extract opposing words, and uncover the mole in your ranks.")}
                   {self.role === "AGENT" &&
                     "Field Operative. Protect your code word, extract opposing words, and uncover the mole in your ranks."}
                 </p>
@@ -2048,14 +2270,33 @@ export default function RoomPage() {
 
                 <button
                   id="decrypt-word-btn"
-                  onMouseDown={handleDecryptStart}
-                  onMouseUp={handleDecryptEnd}
-                  onTouchStart={() => handleDecryptStart()}
+                  onPointerDown={(e) => {
+                    e.preventDefault();
+                    handleDecryptStart();
+                  }}
+                  onPointerUp={(e) => {
+                    e.preventDefault();
+                    handleDecryptEnd();
+                  }}
+                  onPointerLeave={() => handleDecryptEnd()}
+                  onPointerCancel={() => handleDecryptEnd()}
+                  onTouchStart={(e) => {
+                    e.preventDefault();
+                    handleDecryptStart();
+                  }}
                   onTouchEnd={(e) => {
                     e.preventDefault();
                     handleDecryptEnd();
                   }}
-                  onTouchCancel={handleDecryptEnd}
+                  onTouchCancel={() => handleDecryptEnd()}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    handleDecryptStart();
+                  }}
+                  onMouseUp={(e) => {
+                    e.preventDefault();
+                    handleDecryptEnd();
+                  }}
                   onContextMenu={(e) => e.preventDefault()}
                   style={{
                     WebkitTouchCallout: "none",
@@ -2387,7 +2628,10 @@ export default function RoomPage() {
               <div className="flex border-b border-carbon-800 bg-carbon-950/60 p-1.5 gap-1.5 font-mono text-xs">
                 <button
                   id="tab-public"
-                  onClick={() => setActiveTab("PUBLIC")}
+                  onClick={() => {
+                    setActiveTab("PUBLIC");
+                    setLastReadTimestamps((prev) => ({ ...prev, PUBLIC: Date.now() }));
+                  }}
                   className={`flex-1 py-2 px-3 rounded font-bold uppercase tracking-wider transition-colors flex items-center justify-center gap-1.5 min-h-[40px] cursor-pointer ${
                     activeTab === "PUBLIC"
                       ? "bg-carbon-800 text-white border border-carbon-700 shadow"
@@ -2395,10 +2639,26 @@ export default function RoomPage() {
                   }`}
                 >
                   <Radio className="w-3.5 h-3.5 text-gray-400" /> Public Wire
+                  {messages.some(
+                    (m) =>
+                      m.channelType === "PUBLIC" &&
+                      m.senderId !== self.id &&
+                      new Date(m.createdAt).getTime() > (lastReadTimestamps["PUBLIC"] || 0) &&
+                      activeTab !== "PUBLIC"
+                  ) && (
+                    <span
+                      id="unread-badge-public"
+                      className="w-2 h-2 rounded-full bg-classified-amber animate-pulse shrink-0 ml-1"
+                      title="Unread transmissions"
+                    />
+                  )}
                 </button>
                 <button
                   id="tab-team"
-                  onClick={() => setActiveTab("TEAM")}
+                  onClick={() => {
+                    setActiveTab("TEAM");
+                    setLastReadTimestamps((prev) => ({ ...prev, TEAM: Date.now() }));
+                  }}
                   className={`flex-1 py-2 px-3 rounded font-bold uppercase tracking-wider transition-colors flex items-center justify-center gap-1.5 min-h-[40px] cursor-pointer ${
                     activeTab === "TEAM"
                       ? self.apparentTeam === "RED"
@@ -2408,10 +2668,26 @@ export default function RoomPage() {
                   }`}
                 >
                   <Flag className="w-3.5 h-3.5" /> {self.apparentTeam} Radio
+                  {messages.some(
+                    (m) =>
+                      m.channelType.startsWith("TEAM") &&
+                      m.senderId !== self.id &&
+                      new Date(m.createdAt).getTime() > (lastReadTimestamps["TEAM"] || 0) &&
+                      activeTab !== "TEAM"
+                  ) && (
+                    <span
+                      id="unread-badge-team"
+                      className="w-2 h-2 rounded-full bg-classified-amber animate-pulse shrink-0 ml-1"
+                      title="Unread transmissions"
+                    />
+                  )}
                 </button>
                 <button
                   id="tab-dm"
-                  onClick={() => setActiveTab("DM")}
+                  onClick={() => {
+                    setActiveTab("DM");
+                    setLastReadTimestamps((prev) => ({ ...prev, DM: Date.now() }));
+                  }}
                   className={`flex-1 py-2 px-3 rounded font-bold uppercase tracking-wider transition-colors flex items-center justify-center gap-1.5 min-h-[40px] cursor-pointer ${
                     activeTab === "DM"
                       ? "bg-classified-amber/20 text-classified-amber border border-classified-amber/50 shadow"
@@ -2419,6 +2695,20 @@ export default function RoomPage() {
                   }`}
                 >
                   <MessageSquare className="w-3.5 h-3.5" /> Direct Line
+                  {messages.some(
+                    (m) =>
+                      m.channelType === "DM" &&
+                      m.recipientId === self.id &&
+                      m.senderId !== self.id &&
+                      new Date(m.createdAt).getTime() > (lastReadTimestamps["DM"] || 0) &&
+                      (activeTab !== "DM" || selectedPeerId !== m.senderId)
+                  ) && (
+                    <span
+                      id="unread-badge-dm"
+                      className="w-2 h-2 rounded-full bg-classified-amber animate-pulse shrink-0 ml-1"
+                      title="Unread direct transmissions"
+                    />
+                  )}
                 </button>
               </div>
 
@@ -2430,7 +2720,10 @@ export default function RoomPage() {
                     <select
                       id="dm-peer-select"
                       value={selectedPeerId || ""}
-                      onChange={(e) => setSelectedPeerId(e.target.value)}
+                      onChange={(e) => {
+                        setSelectedPeerId(e.target.value);
+                        setLastReadTimestamps((prev) => ({ ...prev, DM: Date.now() }));
+                      }}
                       className="bg-carbon-900 border border-carbon-700 text-classified-amber text-xs rounded px-2.5 py-1.5 focus:outline-none focus:border-classified-amber uppercase font-bold min-h-[36px]"
                     >
                       {peerPlayers.map((peer) => (
@@ -2501,15 +2794,52 @@ export default function RoomPage() {
               )}
 
               {/* Clearance Denied Alert */}
-              {activeTab === "DM" && selectedPeerId && !gameState?.verifiedAssets?.includes(selectedPeerId) && gameState?.challengeStatuses?.[selectedPeerId] === "DENIED" && (
-                <div
-                  id="clearance-denied-badge"
-                  className="bg-red-950/50 border-b border-red-500/40 px-4 py-2 text-xs font-mono text-red-300 flex items-center gap-2"
-                >
-                  <ShieldAlert className="w-3.5 h-3.5 text-red-400 shrink-0" />
-                  <span><strong>CLEARANCE DENIED:</strong> Target operative failed counter-signature verification. Not an asset.</span>
-                </div>
-              )}
+              {activeTab === "DM" &&
+                selectedPeerId &&
+                !gameState?.verifiedAssets?.includes(selectedPeerId) &&
+                gameState?.challengeStatuses?.[selectedPeerId] === "DENIED" &&
+                !dismissedAlerts[`denied_${selectedPeerId}`] && (
+                  <div
+                    id="clearance-denied-badge"
+                    className="bg-red-950/50 border-b border-red-500/40 px-4 py-2 text-xs font-mono text-red-300 flex items-center justify-between animate-in fade-in duration-200"
+                  >
+                    <div className="flex items-center gap-2">
+                      <ShieldAlert className="w-3.5 h-3.5 text-red-400 shrink-0" />
+                      <span><strong>CLEARANCE DENIED:</strong> Target operative failed counter-signature verification. Not an asset.</span>
+                    </div>
+                    <button
+                      onClick={() => setDismissedAlerts((prev) => ({ ...prev, [`denied_${selectedPeerId}`]: true }))}
+                      className="text-red-400 hover:text-white p-0.5 ml-2 cursor-pointer"
+                      aria-label="Dismiss alert"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+
+              {/* Clearance Declined Alert */}
+              {activeTab === "DM" &&
+                selectedPeerId &&
+                !gameState?.verifiedAssets?.includes(selectedPeerId) &&
+                gameState?.challengeStatuses?.[selectedPeerId] === "DECLINED" &&
+                !dismissedAlerts[`declined_${selectedPeerId}`] && (
+                  <div
+                    id="clearance-declined-badge"
+                    className="bg-amber-950/50 border-b border-amber-500/40 px-4 py-2 text-xs font-mono text-amber-300 flex items-center justify-between animate-in fade-in duration-200"
+                  >
+                    <div className="flex items-center gap-2">
+                      <ShieldAlert className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                      <span><strong>CLEARANCE DECLINED:</strong> Target operative declined verification credentials.</span>
+                    </div>
+                    <button
+                      onClick={() => setDismissedAlerts((prev) => ({ ...prev, [`declined_${selectedPeerId}`]: true }))}
+                      className="text-amber-400 hover:text-white p-0.5 ml-2 cursor-pointer"
+                      aria-label="Dismiss alert"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
 
               {/* Burn Notice Alert */}
               {burnNotice && (
@@ -2744,14 +3074,14 @@ export default function RoomPage() {
                 <ul className="space-y-2 list-disc list-inside text-gray-300 pl-1 leading-relaxed">
                   <li>
                     <strong className="text-white">Primary Mission Objective:</strong> Assemble all{" "}
-                    <strong>{players.length || 6}</strong> secret code words across both factions (your team&apos;s words + enemy words). You must earn teammates&apos; trust to share allied words while using deductive interrogation to uncover enemy words.
+                    <strong>{players.length || 6}</strong> secret code words across both factions (your team&apos;s words + enemy words). Assembling the full codebook requires earning teammates&apos; trust to share allied words AND using your embedded mole (and covert interrogations) to discover opposing code words.
                   </li>
                   <li>
                     <strong className="text-white">Redaction & Anti-Peeking:</strong> Your secret code word is blacked out by default. Use the{" "}
                     <span className="text-classified-amber font-bold">&quot;Hold to Decrypt&quot;</span> button to reveal it. Release immediately to re-conceal. Never share your word carelessly!
                   </li>
                   <li>
-                    <strong className="text-white">Beware The Embedded Mole:</strong> One of your apparent teammates is an enemy double-agent! They have full access to your Team Radio, but are secretly feeding intel to the opposing Spymaster.
+                    <strong className="text-white">Beware The Embedded Mole:</strong> One of your apparent teammates is an enemy double-agent! They have full access to your Team Radio, but are secretly feeding intel to their true opposing TEAM (via covert 1-on-1 Direct Line comms).
                   </li>
                   <li>
                     <strong className="text-white">50% Midpoint Theme Intercept:</strong> Halfway through the mission timeline, Central Command declassifies the{" "}
@@ -2866,16 +3196,18 @@ export default function RoomPage() {
                         <span className="text-classified-terminal font-bold">You win if and only if your ACTUAL faction wins!</span> Helping your apparent cover team win will result in your defeat.
                       </li>
                       <li>
-                        <strong className="text-white">Sabotage & Infiltration:</strong> Blend in on your apparent team&apos;s Team Radio. Feed them plausible false words that fit the theme to waste their guess slots, and withhold genuine words.
+                        <strong className="text-white">Extract & Transmit Genuine Intel:</strong> Your primary operational focus is to discover your apparent team&apos;s genuine code words and secretly transmit them to your true teammates (and Spymaster) via private 1-on-1 Direct Line comms.
                       </li>
                       <li>
-                        <strong className="text-white">Screen-Share Safe Handshake:</strong> When your true Spymaster challenges your credentials via 1-on-1 DM, click{" "}
-                        <span className="text-classified-terminal font-bold">&quot;Transmit Counter-Signature&quot;</span>. An emerald confirmation toast will appear and{" "}
-                        <span className="text-classified-terminal font-bold">self-destruct after 3 seconds</span>. Your screen retains zero persistent badges, ensuring you can safely screen-share without blowing your cover!
+                        <strong className="text-white">Disinformation & Sabotage:</strong> Blend in on your apparent team&apos;s Team Radio. Actively feed them convincing false intel and decoy candidate words to derail their deliberations, waste their guess slots, and protect your true team&apos;s secrets.
                       </li>
                       <li>
-                        <strong className="text-white">Anti-Forensic Burn Protocol:</strong> After transmitting secrets to your true Spymaster in 1-on-1 DMs, click the{" "}
-                        <span className="text-red-400 font-bold">&quot;Burn Conversation&quot;</span> button to incinerate all message logs.
+                        <strong className="text-white">Cover Identity Masking & Screen-Share Safety:</strong> When your device is resting or idle, your screen displays an innocent Agent dossier identical to your apparent teammates. Only while pressing and holding &quot;Hold to Decrypt&quot; does your covert role and true allegiance flash into view. When your true Spymaster or teammates challenge your credentials via 1-on-1 DM, click{" "}
+                        <span className="text-classified-terminal font-bold">&quot;Transmit Counter-Signature&quot;</span>. An emerald confirmation toast will appear and self-destruct after 3 seconds with zero persistent UI traces.
+                      </li>
+                      <li>
+                        <strong className="text-white">Anti-Forensic Burn Protocol:</strong> After transmitting secrets in 1-on-1 DMs, click the{" "}
+                        <span className="text-red-400 font-bold">&quot;Burn Conversation&quot;</span> button to incinerate all message logs for your station.
                       </li>
                     </ul>
                   </div>
@@ -2895,6 +3227,214 @@ export default function RoomPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* INCOMING DM NOTIFICATION TOAST */}
+      {dmAlert && (
+        <div
+          id="incoming-dm-toast"
+          onClick={() => {
+            setActiveTab("DM");
+            setSelectedPeerId(dmAlert.senderId);
+            setLastReadTimestamps((prev) => ({ ...prev, DM: Date.now() }));
+            setDmAlert(null);
+          }}
+          className="fixed top-20 right-4 z-40 max-w-sm w-full bg-carbon-900/95 border-2 border-classified-amber rounded-lg p-3.5 shadow-2xl font-mono cursor-pointer animate-in slide-in-from-top-3 duration-200 hover:bg-carbon-850 backdrop-blur-sm"
+        >
+          <div className="flex items-center justify-between mb-1.5">
+            <div className="flex items-center gap-1.5 text-classified-amber text-xs font-bold uppercase tracking-wider">
+              <Radio className="w-3.5 h-3.5 animate-pulse" /> INCOMING DIRECT TRANSMISSION
+            </div>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setDmAlert(null);
+              }}
+              className="text-gray-400 hover:text-white p-0.5"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+          <div className="text-xs text-white font-bold mb-0.5">{dmAlert.senderName}</div>
+          <p className="text-xs text-gray-300 line-clamp-2 italic">&quot;{dmAlert.preview}&quot;</p>
+          <div className="text-[10px] text-classified-amber uppercase tracking-wider mt-2 flex items-center justify-between border-t border-carbon-800 pt-1.5">
+            <span>CLICK TO OPEN DIRECT LINE</span>
+            <span>→</span>
+          </div>
+        </div>
+      )}
+
+      {/* DEV OPS PLAYTESTING HUD */}
+      {isDevMode && (
+        <aside
+          id="dev-controls-hud"
+          aria-label="Developer Operations Console"
+          className="fixed bottom-0 left-0 right-0 z-50 bg-carbon-950/95 border-t-2 border-classified-amber p-2.5 sm:px-6 font-mono text-xs shadow-2xl backdrop-blur-md"
+        >
+          <div className="max-w-6xl mx-auto flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-classified-amber animate-pulse"></span>
+              <span className="font-bold text-classified-amber uppercase tracking-wider">DEV OPS CONSOLE</span>
+              <span className="text-[10px] bg-carbon-800 text-gray-400 px-1.5 py-0.5 rounded border border-carbon-700">
+                PHASE: {room.phase}
+              </span>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Fill Bots in Lobby */}
+              {room.phase === "LOBBY" && (
+                <button
+                  id="dev-fill-bots-btn"
+                  disabled={isDevActionLoading || players.length >= 6}
+                  onClick={async () => {
+                    setIsDevActionLoading(true);
+                    try {
+                      const res = await fetch(`/api/rooms/${code}/dev`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ action: "fill_bots" }),
+                      });
+                      if (res.ok) await fetchState();
+                    } finally {
+                      setIsDevActionLoading(false);
+                    }
+                  }}
+                  className="px-2.5 py-1 bg-carbon-800 hover:bg-carbon-700 text-classified-terminal border border-green-700 rounded font-bold uppercase tracking-wider disabled:opacity-50 cursor-pointer"
+                >
+                  🤖 Fill 5 Bots ({players.length}/6)
+                </button>
+              )}
+
+              {/* Warp to Midpoint */}
+              {room.phase === "INFILTRATION" && (
+                <button
+                  id="dev-warp-midpoint-btn"
+                  disabled={isDevActionLoading}
+                  onClick={async () => {
+                    setIsDevActionLoading(true);
+                    try {
+                      const res = await fetch(`/api/rooms/${code}/timer/warp`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json", "x-subterfuge-dev": "true" },
+                        body: JSON.stringify({ target: "MIDPOINT" }),
+                      });
+                      if (res.ok) await fetchState();
+                    } finally {
+                      setIsDevActionLoading(false);
+                    }
+                  }}
+                  className="px-2.5 py-1 bg-carbon-800 hover:bg-carbon-700 text-classified-amber border border-amber-700 rounded font-bold uppercase tracking-wider cursor-pointer"
+                >
+                  ⏩ Warp: Midpoint (50%)
+                </button>
+              )}
+
+              {/* Warp to Verdict */}
+              {room.phase === "INFILTRATION" && (
+                <button
+                  id="dev-warp-verdict-btn"
+                  disabled={isDevActionLoading}
+                  onClick={async () => {
+                    setIsDevActionLoading(true);
+                    try {
+                      const res = await fetch(`/api/rooms/${code}/timer/warp`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json", "x-subterfuge-dev": "true" },
+                        body: JSON.stringify({ target: "VERDICT" }),
+                      });
+                      if (res.ok) await fetchState();
+                    } finally {
+                      setIsDevActionLoading(false);
+                    }
+                  }}
+                  className="px-2.5 py-1 bg-carbon-800 hover:bg-carbon-700 text-yellow-400 border border-yellow-700 rounded font-bold uppercase tracking-wider cursor-pointer"
+                >
+                  ⏩ Warp: Verdict
+                </button>
+              )}
+
+              {/* Fast-Forward to Debrief */}
+              {(room.phase === "INFILTRATION" || room.phase === "VERDICT") && (
+                <button
+                  id="dev-warp-debrief-btn"
+                  disabled={isDevActionLoading}
+                  onClick={async () => {
+                    setIsDevActionLoading(true);
+                    try {
+                      const res = await fetch(`/api/rooms/${code}/timer/warp`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json", "x-subterfuge-dev": "true" },
+                        body: JSON.stringify({ target: "DEBRIEF" }),
+                      });
+                      if (res.ok) await fetchState();
+                    } finally {
+                      setIsDevActionLoading(false);
+                    }
+                  }}
+                  className="px-2.5 py-1 bg-carbon-800 hover:bg-carbon-700 text-red-400 border border-red-700 rounded font-bold uppercase tracking-wider cursor-pointer"
+                >
+                  ⏩ Complete Match (Debrief)
+                </button>
+              )}
+
+              {/* God Mode Toggle */}
+              <button
+                id="dev-god-mode-btn"
+                onClick={async () => {
+                  if (!isGodMode) {
+                    try {
+                      const res = await fetch(`/api/rooms/${code}/dev`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ action: "god_mode" }),
+                      });
+                      if (res.ok) {
+                        const data = await res.json();
+                        setGodData(data);
+                      }
+                    } catch (e) {
+                      console.error(e);
+                    }
+                  }
+                  setIsGodMode(!isGodMode);
+                }}
+                className={`px-2.5 py-1 rounded font-bold uppercase tracking-wider border cursor-pointer ${
+                  isGodMode
+                    ? "bg-classified-amber text-black border-classified-amber"
+                    : "bg-carbon-800 hover:bg-carbon-700 text-gray-300 border-carbon-600"
+                }`}
+              >
+                👁️ God Mode: {isGodMode ? "ON" : "OFF"}
+              </button>
+
+              {/* Reset Lobby */}
+              <button
+                id="dev-reset-lobby-btn"
+                disabled={isDevActionLoading}
+                onClick={async () => {
+                  setIsDevActionLoading(true);
+                  try {
+                    const res = await fetch(`/api/rooms/${code}/dev`, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ action: "reset_lobby" }),
+                    });
+                    if (res.ok) {
+                      setIsGodMode(false);
+                      setGodData(null);
+                      await fetchState();
+                    }
+                  } finally {
+                    setIsDevActionLoading(false);
+                  }
+                }}
+                className="px-2.5 py-1 bg-carbon-800 hover:bg-red-950 text-gray-400 hover:text-red-300 border border-carbon-700 rounded font-bold uppercase tracking-wider cursor-pointer"
+              >
+                🔄 Reset Lobby
+              </button>
+            </div>
+          </div>
+        </aside>
       )}
     </div>
   );

@@ -21,6 +21,7 @@ export interface Message {
   recipientId?: string; // Only for DMs
   content: string;
   createdAt: string;
+  burnedBy?: string[]; // Player IDs who have burned this message
 }
 
 export interface Player {
@@ -60,7 +61,7 @@ export interface MoleChallenge {
   requesterName: string;
   targetId: string;
   targetName: string;
-  status: "PENDING" | "ACCEPTED" | "DENIED";
+  status: "PENDING" | "ACCEPTED" | "DENIED" | "DECLINED";
   createdAt: string;
 }
 
@@ -145,7 +146,7 @@ export interface ClientGameState {
     requesterName: string;
     createdAt: string;
   }[];
-  challengeStatuses?: Record<string, "PENDING" | "ACCEPTED" | "DENIED">; // targetId -> status
+  challengeStatuses?: Record<string, "PENDING" | "ACCEPTED" | "DENIED" | "DECLINED">; // targetId -> status
   teamSuggestions?: WordSuggestion[];
   teamVerdict?: TeamVerdict;
   allVerdicts?: Record<TeamColor, TeamVerdict>; // only in DEBRIEF

@@ -83,13 +83,17 @@ test.describe("Slice 3: Communication Suite, Channel Isolation & Anti-Forensic B
     await harness.selectDMPeer(redOp2, blueOp1);
     await harness.expectMessageNotInFeed(redOp2, dmMsg);
 
-    // 6. Test Burn Conversation: Red Op 1 burns the conversation with Blue Op 1
+    // 6. Test Unilateral Burn Conversation: Red Op 1 burns the conversation with Blue Op 1
     await harness.switchTab(redOp1, "DM");
     await harness.selectDMPeer(redOp1, blueOp1);
     await harness.burnDM(redOp1);
 
-    // Verify messages wiped on both Red Op 1 and Blue Op 1
+    // Verify messages wiped for Red Op 1 (the burner), but retained for Blue Op 1 (the peer)
     await harness.expectMessageNotInFeed(redOp1, dmMsg);
+    await harness.expectMessageInFeed(blueOp1, dmMsg);
+
+    // Now Blue Op 1 burns the conversation from their station
+    await harness.burnDM(blueOp1);
     await harness.expectMessageNotInFeed(blueOp1, dmMsg);
   });
 });
