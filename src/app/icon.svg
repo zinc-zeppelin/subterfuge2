@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#18181b"/>
+      <stop offset="100%" stop-color="#09090b"/>
+    </linearGradient>
+    <radialGradient id="irisGrad" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#fbbf24"/>
+      <stop offset="70%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#d97706"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Base Plate / Shield -->
+  <rect x="2" y="2" width="60" height="60" rx="14" fill="url(#bgGrad)" stroke="#27272a" stroke-width="2"/>
+  
+  <!-- CRT Scanline accents -->
+  <line x1="8" y1="18" x2="56" y2="18" stroke="#27272a" stroke-width="1" opacity="0.3"/>
+  <line x1="8" y1="27" x2="56" y2="27" stroke="#27272a" stroke-width="1" opacity="0.3"/>
+  <line x1="8" y1="37" x2="56" y2="37" stroke="#27272a" stroke-width="1" opacity="0.3"/>
+  <line x1="8" y1="46" x2="56" y2="46" stroke="#27272a" stroke-width="1" opacity="0.3"/>
+
+  <!-- Tactical HUD Corner Brackets -->
+  <path d="M 8 18 L 8 8 L 18 8" fill="none" stroke="#f59e0b" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M 46 8 L 56 8 L 56 18" fill="none" stroke="#f59e0b" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M 8 46 L 8 56 L 18 56" fill="none" stroke="#f59e0b" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M 46 56 L 56 56 L 56 46" fill="none" stroke="#f59e0b" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Radar / Cryptographic Reticle Ring -->
+  <circle cx="32" cy="32" r="19" fill="none" stroke="#3f3f46" stroke-width="1.5" stroke-dasharray="3 3"/>
+
+  <!-- Red vs Blue Cardinal Crosshair Ticks -->
+  <line x1="32" y1="8" x2="32" y2="14" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="32" y1="50" x2="32" y2="56" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="8" y1="32" x2="14" y2="32" stroke="#38bdf8" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="50" y1="32" x2="56" y2="32" stroke="#38bdf8" stroke-width="2.5" stroke-linecap="round"/>
+
+  <!-- Central Espionage All-Seeing Eye / Classified Aperture -->
+  <path d="M 16 32 C 22 21 42 21 48 32 C 42 43 22 43 16 32 Z" fill="#09090b" stroke="#f59e0b" stroke-width="2.5" stroke-linejoin="round"/>
+
+  <!-- Inner Iris Aperture -->
+  <circle cx="32" cy="32" r="7.5" fill="url(#irisGrad)"/>
+
+  <!-- Classified Red Faction Core / Pupil -->
+  <circle cx="32" cy="32" r="3.5" fill="#ef4444"/>
+
+  <!-- Glint / Lens Specular Highlight -->
+  <circle cx="30" cy="30" r="1.2" fill="#ffffff"/>
+</svg>
