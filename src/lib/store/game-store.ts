@@ -663,6 +663,10 @@ class GameStore {
       throw new Error("INVALID_TARGET: Cannot challenge self");
     }
 
+    if (caller.apparentTeam === target.apparentTeam) {
+      throw new Error("INVALID_TARGET: Mole verification challenges are only permitted between operatives on opposing factions");
+    }
+
     if (!data.challenges[upperCode]) {
       data.challenges[upperCode] = [];
     }

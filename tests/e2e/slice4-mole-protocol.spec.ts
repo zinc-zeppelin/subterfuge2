@@ -36,7 +36,8 @@ test.describe("Slice 4: Covert Mole Protocol & Targeted Clearance Handshake", ()
     // 2. Identify roles across operatives
     let redMoleIdx = -1;
     let redAgentIdx = -1;
-    let blueRequesterIdx = -1;
+    let blueAgentIdx = -1;
+    let otherBlueIdx = -1;
 
     for (let i = 0; i < 6; i++) {
       const dossier = await harness.getPlayerDossier(i);
@@ -44,26 +45,38 @@ test.describe("Slice 4: Covert Mole Protocol & Targeted Clearance Handshake", ()
         redMoleIdx = i;
       } else if (dossier.apparentTeam === "RED" && dossier.actualTeam === "RED" && dossier.role === "AGENT") {
         redAgentIdx = i;
-      } else if (dossier.apparentTeam === "BLUE" && dossier.actualTeam === "BLUE") {
-        blueRequesterIdx = i;
+      } else if (dossier.apparentTeam === "BLUE" && dossier.actualTeam === "BLUE" && dossier.role === "AGENT") {
+        blueAgentIdx = i;
       }
     }
 
     expect(redMoleIdx).toBeGreaterThanOrEqual(0);
     expect(redAgentIdx).toBeGreaterThanOrEqual(0);
-    expect(blueRequesterIdx).toBeGreaterThanOrEqual(0);
+    expect(blueAgentIdx).toBeGreaterThanOrEqual(0);
 
-    // 3. SUCCESSFUL HANDSHAKE: Blue Operative challenges Red Mole
+    // Find another operative on Blue apparent team
+    for (let i = 0; i < 6; i++) {
+      if (i !== blueAgentIdx) {
+        const dossier = await harness.getPlayerDossier(i);
+        if (dossier.apparentTeam === "BLUE") {
+          otherBlueIdx = i;
+          break;
+        }
+      }
+    }
+    expect(otherBlueIdx).toBeGreaterThanOrEqual(0);
+
+    // 3. SUCCESSFUL HANDSHAKE: Blue Field Agent (Non-Spymaster) challenges Red Mole on opposing cover
     // Blue operative switches to DM tab and selects Red Mole
-    await harness.switchTab(blueRequesterIdx, "DM");
-    await harness.selectDMPeer(blueRequesterIdx, redMoleIdx);
+    await harness.switchTab(blueAgentIdx, "DM");
+    await harness.selectDMPeer(blueAgentIdx, redMoleIdx);
 
-    // Initial state: Verify button is visible
-    const requesterPage = harness.sessions[blueRequesterIdx].page;
+    // Initial state: Verify button is visible for non-spymaster Field Agent
+    const requesterPage = harness.sessions[blueAgentIdx].page;
     await expect(requesterPage.locator("#verify-credentials-btn")).toBeVisible();
 
     // Blue operative initiates clearance challenge
-    await harness.initiateClearanceChallenge(blueRequesterIdx);
+    await harness.initiateClearanceChallenge(blueAgentIdx);
 
     // Blue operative sees awaiting response
     await expect(requesterPage.locator("#challenge-pending-badge")).toBeVisible({ timeout: 5000 });
@@ -72,7 +85,7 @@ test.describe("Slice 4: Covert Mole Protocol & Targeted Clearance Handshake", ()
     const molePage = harness.sessions[redMoleIdx].page;
     await expect(molePage.locator("#clearance-challenge-modal")).toBeVisible({ timeout: 10000 });
     await expect(molePage.locator("#clearance-challenge-modal")).toContainText(
-      harness.sessions[blueRequesterIdx].callsign
+      harness.sessions[blueAgentIdx].callsign
     );
 
     // Red Mole submits counter-signature
@@ -90,18 +103,18 @@ test.describe("Slice 4: Covert Mole Protocol & Targeted Clearance Handshake", ()
     await expect(molePage.locator("#confirmed-asset-badge")).not.toBeVisible();
 
     // Requester screen now has permanent cryptographic asset receipt
-    await harness.expectConfirmedAssetReceipt(blueRequesterIdx);
+    await harness.expectConfirmedAssetReceipt(blueAgentIdx);
     await expect(requesterPage.locator("#confirmed-asset-badge")).toBeVisible();
     await expect(requesterPage.locator("#confirmed-asset-receipt")).toContainText(
       harness.sessions[redMoleIdx].callsign
     );
 
-    // 4. DENIED HANDSHAKE: Blue Operative challenges Loyal Red Agent
-    await harness.selectDMPeer(blueRequesterIdx, redAgentIdx);
+    // 4. DENIED HANDSHAKE: Blue Operative challenges Loyal Red Agent on opposing cover
+    await harness.selectDMPeer(blueAgentIdx, redAgentIdx);
     await expect(requesterPage.locator("#verify-credentials-btn")).toBeVisible();
 
     // Initiate challenge to loyal agent
-    await harness.initiateClearanceChallenge(blueRequesterIdx);
+    await harness.initiateClearanceChallenge(blueAgentIdx);
 
     // Red Agent receives challenge modal
     const agentPage = harness.sessions[redAgentIdx].page;
@@ -116,5 +129,9 @@ test.describe("Slice 4: Covert Mole Protocol & Targeted Clearance Handshake", ()
     // Requester sees clearance denied badge
     await expect(requesterPage.locator("#clearance-denied-badge")).toBeVisible({ timeout: 10000 });
     await expect(requesterPage.locator("#confirmed-asset-badge")).not.toBeVisible();
+
+    // 5. PROHIBITED HANDSHAKE: Same-team operatives cannot request mole verification
+    await harness.selectDMPeer(blueAgentIdx, otherBlueIdx);
+    await expect(requesterPage.locator("#verify-credentials-btn")).not.toBeVisible();
   });
 });

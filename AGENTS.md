@@ -85,9 +85,9 @@ Before modifying game logic, agents must understand the core rules:
    - Words are masked behind a **"Hold to Decrypt"** interaction to prevent shoulder-surfing.
    - At exactly 50% elapsed mission time, the system broadcasts the operational theme to all operatives.
 4. **Mole Verification Protocol (Screen-Share Safe):**
-   - Spymasters can issue a covert clearance challenge in 1-on-1 DMs.
+   - Any operative (Spymaster or Field Agent) can issue a covert clearance challenge in 1-on-1 DMs to operatives wearing opposing-team cover (`apparentTeam !== activePeer.apparentTeam`). Same-faction challenges are prohibited.
    - Genuine moles see a 3-second self-destruct toast (`"Operative Verified"`) with zero persistent UI traces.
-   - The Spymaster receives a persistent cryptographic receipt (`CONFIRMED ASSET`).
+   - The challenging operative receives a persistent cryptographic receipt (`CONFIRMED ASSET`).
 5. **Verdict & Scoring:**
    - Spymasters lock in guesses for all $N$ words and optionally indict an enemy mole.
    - Correct Word: $+1$ PT. Wrong Word: $0$ PTS (no penalty).

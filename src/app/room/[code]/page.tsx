@@ -2434,32 +2434,34 @@ export default function RoomPage() {
                   </div>
 
                   <div className="flex items-center gap-2">
-                    {selectedPeerId && gameState?.verifiedAssets?.includes(selectedPeerId) ? (
-                      <span
-                        id="confirmed-asset-badge"
-                        className="flex items-center gap-1 text-[11px] bg-emerald-950 border border-emerald-500 text-emerald-300 px-2.5 py-1.5 rounded font-bold tracking-wider uppercase"
-                      >
-                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                        CONFIRMED ASSET
-                      </span>
-                    ) : selectedPeerId && gameState?.challengeStatuses?.[selectedPeerId] === "PENDING" ? (
-                      <span
-                        id="challenge-pending-badge"
-                        className="text-[11px] bg-amber-950 border border-amber-500/50 text-amber-300 px-2.5 py-1.5 rounded uppercase tracking-wider font-mono animate-pulse"
-                      >
-                        AWAITING RESPONSE...
-                      </span>
-                    ) : (
-                      <button
-                        id="verify-credentials-btn"
-                        onClick={handleInitiateChallenge}
-                        disabled={isChallenging || !selectedPeerId}
-                        className="flex items-center gap-1 text-[11px] bg-carbon-900 hover:bg-carbon-800 text-classified-amber border border-classified-amber/50 px-2.5 py-1.5 rounded font-bold tracking-wider uppercase transition-colors min-h-[36px] active:scale-95 cursor-pointer"
-                      >
-                        <ShieldAlert className="w-3.5 h-3.5 text-classified-amber" />
-                        {isChallenging ? "CHALLENGING..." : "VERIFY OPERATIVE CREDENTIALS"}
-                      </button>
-                    )}
+                    {selectedPeerId && activePeer && activePeer.apparentTeam !== self.apparentTeam ? (
+                      gameState?.verifiedAssets?.includes(selectedPeerId) ? (
+                        <span
+                          id="confirmed-asset-badge"
+                          className="flex items-center gap-1 text-[11px] bg-emerald-950 border border-emerald-500 text-emerald-300 px-2.5 py-1.5 rounded font-bold tracking-wider uppercase"
+                        >
+                          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                          CONFIRMED ASSET
+                        </span>
+                      ) : gameState?.challengeStatuses?.[selectedPeerId] === "PENDING" ? (
+                        <span
+                          id="challenge-pending-badge"
+                          className="text-[11px] bg-amber-950 border border-amber-500/50 text-amber-300 px-2.5 py-1.5 rounded uppercase tracking-wider font-mono animate-pulse"
+                        >
+                          AWAITING RESPONSE...
+                        </span>
+                      ) : (
+                        <button
+                          id="verify-credentials-btn"
+                          onClick={handleInitiateChallenge}
+                          disabled={isChallenging || !selectedPeerId}
+                          className="flex items-center gap-1 text-[11px] bg-carbon-900 hover:bg-carbon-800 text-classified-amber border border-classified-amber/50 px-2.5 py-1.5 rounded font-bold tracking-wider uppercase transition-colors min-h-[36px] active:scale-95 cursor-pointer"
+                        >
+                          <ShieldAlert className="w-3.5 h-3.5 text-classified-amber" />
+                          {isChallenging ? "CHALLENGING..." : "VERIFY OPERATIVE CREDENTIALS"}
+                        </button>
+                      )
+                    ) : null}
 
                     <button
                       id="burn-dm-btn"
@@ -2746,6 +2748,9 @@ export default function RoomPage() {
                   <li>
                     <strong className="text-white">50% Midpoint Theme Intercept:</strong> Halfway through the mission timeline, Central Command declassifies the{" "}
                     <span className="text-classified-amber font-bold">Secret Theme</span> uniting all genuine words. Cross-reference all claimed words against this theme to identify false leads and expose liars.
+                  </li>
+                  <li>
+                    <strong className="text-white">Universal Mole Verification:</strong> Any operative (Field Agent or Spymaster) can request clearance verification in 1-on-1 Direct Line chats with operatives on the opposing apparent team. If they are your faction&apos;s embedded double-agent, they can confirm their allegiance to establish an authenticated covert line and receive a permanent Confirmed Asset receipt.
                   </li>
                   <li>
                     <strong className="text-white">Verdict Deliberation & Scoring (+1 / 0):</strong> In the final 60-minute Verdict phase, propose candidate words on the collaborative board and upvote nominations. Teams score{" "}
