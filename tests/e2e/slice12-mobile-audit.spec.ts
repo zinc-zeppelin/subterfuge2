@@ -61,8 +61,8 @@ test.describe("Slice 12: Mobile Browser Audit (iOS Safari & Android Chrome)", ()
     });
     expect(hasHorizontalOverflowLobby).toBe(true);
 
-    // 3. Fast-join 3 other operatives via direct API so room meets minimum 4 operatives
-    const extraCallsigns = ["Mobile-Bravo", "Mobile-Charlie", "Mobile-Delta"];
+    // 3. Fast-join 5 other operatives via direct API so room meets minimum 6 operatives
+    const extraCallsigns = ["Mobile-Bravo", "Mobile-Charlie", "Mobile-Delta", "Mobile-Echo", "Mobile-Foxtrot"];
     for (const callsign of extraCallsigns) {
       const joinRes = await request.post(`/api/rooms/${roomCode}/join`, {
         data: { playerName: callsign },
@@ -84,8 +84,8 @@ test.describe("Slice 12: Mobile Browser Audit (iOS Safari & Android Chrome)", ()
     await page.click("#toggle-ready-btn");
     await expect(page.locator("#toggle-ready-btn")).toContainText("CANCEL READY STATUS");
 
-    // Wait for all 4 to be ready on host screen
-    await expect(page.getByText("4/4 READY")).toBeVisible({ timeout: 15000 });
+    // Wait for all 6 to be ready on host screen
+    await expect(page.getByText("6/6 READY")).toBeVisible({ timeout: 15000 });
     const startBtn = page.locator("#start-operation-btn");
     await expect(startBtn).toBeEnabled({ timeout: 15000 });
 

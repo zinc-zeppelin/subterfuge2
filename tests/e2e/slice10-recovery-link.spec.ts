@@ -96,7 +96,7 @@ test.describe("Slice 10: Jackbox-Style Personal Recovery Links, Device Auto-Resu
     await expect(p1InRoster.locator("text=YOU")).toBeVisible();
     await freshContext.close();
 
-    // Step 6: Add 2 more players (P3, P4) to meet 4-player requirement and start Infiltration
+    // Step 6: Add 4 more players (P3, P4, P5, P6) to meet 6-player requirement and start Infiltration
     const p3Context = await browser.newContext();
     const p3Page = await p3Context.newPage();
     await p3Page.goto(`${url}/room/${roomCode}`);
@@ -111,6 +111,20 @@ test.describe("Slice 10: Jackbox-Style Personal Recovery Links, Device Auto-Resu
     await p4Page.click("#join-room-submit-btn");
     await expect(p4Page.locator("#toggle-ready-btn")).toBeVisible({ timeout: 10000 });
 
+    const p5Context = await browser.newContext();
+    const p5Page = await p5Context.newPage();
+    await p5Page.goto(`${url}/room/${roomCode}`);
+    await p5Page.fill("#join-callsign-input", "Agent-Echo");
+    await p5Page.click("#join-room-submit-btn");
+    await expect(p5Page.locator("#toggle-ready-btn")).toBeVisible({ timeout: 10000 });
+
+    const p6Context = await browser.newContext();
+    const p6Page = await p6Context.newPage();
+    await p6Page.goto(`${url}/room/${roomCode}`);
+    await p6Page.fill("#join-callsign-input", "Agent-Foxtrot");
+    await p6Page.click("#join-room-submit-btn");
+    await expect(p6Page.locator("#toggle-ready-btn")).toBeVisible({ timeout: 10000 });
+
     // All declare ready
     await p1Page.click("#toggle-ready-btn");
     await expect(p1Page.locator("#toggle-ready-btn")).toContainText("CANCEL READY STATUS", { timeout: 10000 });
@@ -120,6 +134,10 @@ test.describe("Slice 10: Jackbox-Style Personal Recovery Links, Device Auto-Resu
     await expect(p3Page.locator("#toggle-ready-btn")).toContainText("CANCEL READY STATUS", { timeout: 10000 });
     await p4Page.click("#toggle-ready-btn");
     await expect(p4Page.locator("#toggle-ready-btn")).toContainText("CANCEL READY STATUS", { timeout: 10000 });
+    await p5Page.click("#toggle-ready-btn");
+    await expect(p5Page.locator("#toggle-ready-btn")).toContainText("CANCEL READY STATUS", { timeout: 10000 });
+    await p6Page.click("#toggle-ready-btn");
+    await expect(p6Page.locator("#toggle-ready-btn")).toContainText("CANCEL READY STATUS", { timeout: 10000 });
 
     // Host commences operations
     await expect(p1Page.locator("#start-operation-btn")).toBeEnabled({ timeout: 15000 });
@@ -182,6 +200,8 @@ test.describe("Slice 10: Jackbox-Style Personal Recovery Links, Device Auto-Resu
     await p2Context.close();
     await p3Context.close();
     await p4Context.close();
+    await p5Context.close();
+    await p6Context.close();
     await unauthContext.close();
   });
 });

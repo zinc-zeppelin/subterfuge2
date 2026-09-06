@@ -84,6 +84,7 @@ export class SixPlayerHarness {
       await op.page.click("#join-room-btn");
 
       await op.page.waitForURL(new RegExp(`/room/${this.roomCode}`));
+      await expect(op.page.locator("#player-roster")).toBeVisible({ timeout: 15000 });
     }
   }
 
@@ -92,9 +93,9 @@ export class SixPlayerHarness {
    */
   public async toggleReady(playerIndex: number): Promise<void> {
     const op = this.sessions[playerIndex];
-    await expect(op.page.locator("#toggle-ready-btn")).toBeVisible({ timeout: 10000 });
+    await expect(op.page.locator("#toggle-ready-btn")).toBeVisible({ timeout: 15000 });
     await op.page.click("#toggle-ready-btn");
-    await expect(op.page.locator("#toggle-ready-btn")).toContainText("CANCEL READY STATUS", { timeout: 10000 });
+    await expect(op.page.locator("#toggle-ready-btn")).toContainText("CANCEL READY STATUS", { timeout: 15000 });
   }
 
   /**
@@ -103,7 +104,7 @@ export class SixPlayerHarness {
   public async setAllReady(): Promise<void> {
     // First ensure every session has connected to the lobby
     for (const op of this.sessions) {
-      await expect(op.page.locator("#toggle-ready-btn")).toBeVisible({ timeout: 10000 });
+      await expect(op.page.locator("#toggle-ready-btn")).toBeVisible({ timeout: 15000 });
     }
     for (let i = 0; i < this.sessions.length; i++) {
       await this.toggleReady(i);
@@ -119,8 +120,9 @@ export class SixPlayerHarness {
    */
   public async verifyRosterCountOnAll(expectedCount: number): Promise<void> {
     for (const op of this.sessions) {
+      await expect(op.page.locator("#player-roster")).toBeVisible({ timeout: 15000 });
       await expect(op.page.locator("#player-roster > div")).toHaveCount(expectedCount, {
-        timeout: 10000,
+        timeout: 15000,
       });
     }
   }
