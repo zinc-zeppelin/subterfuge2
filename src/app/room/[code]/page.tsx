@@ -31,6 +31,7 @@ import {
   Check,
   Link as LinkIcon,
   KeyRound,
+  Bell,
 } from "lucide-react";
 
 export default function RoomPage() {
@@ -106,6 +107,7 @@ export default function RoomPage() {
     preview: string;
   } | null>(null);
   const [dismissedAlerts, setDismissedAlerts] = useState<Record<string, boolean>>({});
+  const [notifPermission, setNotifPermission] = useState<NotificationPermission>("default");
   const prevMessagesRef = useRef<Message[]>([]);
   const hasFetchedInitialMessagesRef = useRef(false);
 
@@ -308,6 +310,139 @@ export default function RoomPage() {
   const selfIdRef = useRef(gameState?.self?.id);
   selfIdRef.current = gameState?.self?.id;
 
+  const playCommsChime = useCallback(() => {
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(1320, ctx.currentTime + 0.08);
+      gain.gain.setValueAtTime(0.12, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.18);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.18);
+    } catch {
+      // Audio context error or blocked before user interaction
+    }
+  }, []);
+
+  const handleOpenDMWithOperative = useCallback((peerId: string) => {
+    setActiveTab("DM");
+    setSelectedPeerId(peerId);
+    setLastReadTimestamps((prev) => ({ ...prev, DM: Date.now() }));
+    setDmAlert(null);
+
+    const scrollToComms = () => {
+      const commsEl = document.getElementById("comms-panel");
+      if (commsEl) {
+        commsEl.scrollIntoView({ behavior: "smooth", block: "start" });
+      } else {
+        const inputEl = document.getElementById("message-input");
+        if (inputEl) inputEl.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+      const inputEl = document.getElementById("message-input");
+      if (inputEl) {
+        try {
+          inputEl.focus({ preventScroll: true });
+        } catch {
+          // focus error fallback
+        }
+      }
+    };
+
+    requestAnimationFrame(scrollToComms);
+    setTimeout(scrollToComms, 120);
+  }, []);
+
+  const swRegistrationRef = useRef<ServiceWorkerRegistration | null>(null);
+
+  const triggerPushNotification = useCallback(
+    (title: string, options: NotificationOptions & { data?: any }) => {
+      if (typeof window === "undefined" || !("Notification" in window)) return;
+      if (Notification.permission !== "granted") return;
+
+      // Try Service Worker registration first (mandatory for mobile Safari & Android Chrome)
+      const reg = swRegistrationRef.current;
+      if (reg && reg.showNotification) {
+        reg.showNotification(title, options).catch(() => {
+          try {
+            const notif = new Notification(title, options);
+            notif.onclick = () => {
+              window.focus();
+              if (options.data?.peerId) handleOpenDMWithOperative(options.data.peerId);
+              notif.close();
+            };
+          } catch {
+            // fallback
+          }
+        });
+        return;
+      }
+
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker
+          .getRegistration()
+          .then((activeReg) => {
+            if (activeReg && activeReg.showNotification) {
+              swRegistrationRef.current = activeReg;
+              activeReg.showNotification(title, options).catch(() => {
+                try {
+                  const notif = new Notification(title, options);
+                  notif.onclick = () => {
+                    window.focus();
+                    if (options.data?.peerId) handleOpenDMWithOperative(options.data.peerId);
+                    notif.close();
+                  };
+                } catch {
+                  // fallback
+                }
+              });
+            } else {
+              try {
+                const notif = new Notification(title, options);
+                notif.onclick = () => {
+                  window.focus();
+                  if (options.data?.peerId) handleOpenDMWithOperative(options.data.peerId);
+                  notif.close();
+                };
+              } catch {
+                // fallback
+              }
+            }
+          })
+          .catch(() => {
+            try {
+              const notif = new Notification(title, options);
+              notif.onclick = () => {
+                window.focus();
+                if (options.data?.peerId) handleOpenDMWithOperative(options.data.peerId);
+                notif.close();
+              };
+            } catch {
+              // fallback
+            }
+          });
+      } else {
+        try {
+          const notif = new Notification(title, options);
+          notif.onclick = () => {
+            window.focus();
+            if (options.data?.peerId) handleOpenDMWithOperative(options.data.peerId);
+            notif.close();
+          };
+        } catch {
+          // fallback
+        }
+      }
+    },
+    [handleOpenDMWithOperative]
+  );
+
   const fetchMessages = useCallback(async () => {
     if (!code) return;
     try {
@@ -330,65 +465,59 @@ export default function RoomPage() {
             const currentTab = activeTabRef.current;
             const currentPeerId = selectedPeerIdRef.current;
 
-          for (const msg of brandNew) {
-            if (msg.senderId !== currentSelfId) {
-              // Push notification if in background
-              if (
-                typeof window !== "undefined" &&
-                "Notification" in window &&
-                Notification.permission === "granted" &&
-                document.hidden
-              ) {
-                try {
+            for (const msg of brandNew) {
+              if (msg.senderId !== currentSelfId) {
+                playCommsChime();
+
+                // Background Notification (when in another tab, another app, or unfocused window)
+                const isUnfocused =
+                  typeof window !== "undefined" && (!document.hasFocus() || document.hidden);
+
+                if (isUnfocused) {
+                  document.title = `🔴 [NEW TRANSMISSION] ${msg.senderName} - SUBTERFUGE`;
+
                   const notifTitle =
                     msg.channelType === "DM"
                       ? `[Subterfuge DM] ${msg.senderName}`
                       : msg.channelType.startsWith("TEAM")
                       ? `[Subterfuge Radio] ${msg.senderName}`
                       : `[Subterfuge Wire] ${msg.senderName}`;
-                  const notif = new Notification(notifTitle, {
-                    body: msg.content,
-                    tag: msg.id,
-                  });
-                  notif.onclick = () => {
-                    window.focus();
-                    if (msg.channelType === "DM") {
-                      setActiveTab("DM");
-                      setSelectedPeerId(msg.senderId);
-                    } else if (msg.channelType.startsWith("TEAM")) {
-                      setActiveTab("TEAM");
-                    } else {
-                      setActiveTab("PUBLIC");
-                    }
-                    notif.close();
-                  };
-                } catch {
-                  // Ignore notification error
-                }
-              }
 
-              // In-page clickable transmission alert for DMs
-              if (
-                msg.channelType === "DM" &&
-                msg.recipientId === currentSelfId &&
-                (currentTab !== "DM" || currentPeerId !== msg.senderId)
-              ) {
-                setDmAlert({
-                  senderId: msg.senderId,
-                  senderName: msg.senderName,
-                  preview: msg.content.length > 60 ? msg.content.slice(0, 60) + "..." : msg.content,
-                });
+                  triggerPushNotification(notifTitle, {
+                    body: msg.content,
+                    icon: "/apple-touch-icon.png",
+                    badge: "/favicon-32x32.png",
+                    tag: msg.id,
+                    vibrate: [200, 100, 200],
+                    data: {
+                      peerId: msg.senderId,
+                      channelType: msg.channelType,
+                    },
+                  } as any);
+                }
+
+                // In-page clickable transmission alert for DMs
+                if (
+                  msg.channelType === "DM" &&
+                  msg.recipientId === currentSelfId &&
+                  (currentTab !== "DM" || currentPeerId !== msg.senderId)
+                ) {
+                  setDmAlert({
+                    senderId: msg.senderId,
+                    senderName: msg.senderName,
+                    preview: msg.content.length > 60 ? msg.content.slice(0, 60) + "..." : msg.content,
+                  });
+                }
               }
             }
           }
         }
+        prevMessagesRef.current = newMessages;
       }
-      prevMessagesRef.current = newMessages;
-    }
     } catch {
       // Ignore polling errors
     }
-  }, [code, authFetch]);
+  }, [code, authFetch, playCommsChime, triggerPushNotification]);
 
   const handleDirectJoin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -481,14 +610,93 @@ export default function RoomPage() {
       fetchState();
       fetchMessages();
     }, 2000);
-    return () => clearInterval(interval);
+
+    // Web Worker unthrottled background timer to defeat browser 60s background throttling
+    let bgWorker: Worker | null = null;
+    try {
+      const workerBlob = new Blob(
+        [
+          `let timer = null;
+           self.onmessage = function(e) {
+             if (e.data === 'start') {
+               if (!timer) timer = setInterval(function() { self.postMessage('tick'); }, 2000);
+             } else if (e.data === 'stop') {
+               if (timer) { clearInterval(timer); timer = null; }
+             }
+           };`,
+        ],
+        { type: "application/javascript" }
+      );
+      const workerUrl = URL.createObjectURL(workerBlob);
+      bgWorker = new Worker(workerUrl);
+      bgWorker.onmessage = () => {
+        if (typeof window !== "undefined" && (!document.hasFocus() || document.hidden)) {
+          fetchState();
+          fetchMessages();
+        }
+      };
+      bgWorker.postMessage("start");
+    } catch {
+      // Worker fallback
+    }
+
+    return () => {
+      clearInterval(interval);
+      if (bgWorker) {
+        try {
+          bgWorker.postMessage("stop");
+          bgWorker.terminate();
+        } catch {
+          // cleanup fallback
+        }
+      }
+    };
   }, [hasGameSession, fetchState, fetchMessages]);
 
   useEffect(() => {
+    if (typeof window !== "undefined" && "serviceWorker" in navigator) {
+      navigator.serviceWorker
+        .register("/sw.js")
+        .then((reg) => {
+          swRegistrationRef.current = reg;
+        })
+        .catch(() => {});
+
+      const handleSwMessage = (event: MessageEvent) => {
+        if (event.data?.type === "OPEN_COMMUNICATION" && event.data?.peerId) {
+          handleOpenDMWithOperative(event.data.peerId);
+        }
+      };
+      navigator.serviceWorker.addEventListener("message", handleSwMessage);
+      return () => {
+        navigator.serviceWorker.removeEventListener("message", handleSwMessage);
+      };
+    }
+  }, [handleOpenDMWithOperative]);
+
+  useEffect(() => {
+    const handleFocus = () => {
+      document.title = "SUBTERFUGE // Intelligence Operative Portal";
+      fetchState();
+      fetchMessages();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        document.title = "SUBTERFUGE // Intelligence Operative Portal";
+        fetchState();
+        fetchMessages();
+      }
+    };
+
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => {
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
       if (decryptTimerRef.current) clearTimeout(decryptTimerRef.current);
     };
-  }, []);
+  }, [fetchState, fetchMessages]);
 
   // Default selected peer in DM tab
   useEffect(() => {
@@ -563,18 +771,31 @@ export default function RoomPage() {
     return () => window.removeEventListener("keydown", handleDevKeyDown);
   }, []);
 
-  // Web Notifications API permission request
+  // Web Notifications API permission state & auto-request
   useEffect(() => {
-    if (
-      typeof window !== "undefined" &&
-      "Notification" in window &&
-      Notification.permission === "default" &&
-      gameState?.room?.phase &&
-      gameState.room.phase !== "LOBBY"
-    ) {
-      Notification.requestPermission().catch(() => {});
+    if (typeof window !== "undefined" && "Notification" in window) {
+      setNotifPermission(Notification.permission);
+      if (
+        Notification.permission === "default" &&
+        gameState?.room?.phase &&
+        gameState.room.phase !== "LOBBY"
+      ) {
+        Notification.requestPermission()
+          .then((p) => setNotifPermission(p))
+          .catch(() => {});
+      }
     }
   }, [gameState?.room?.phase]);
+
+  const handleRequestNotifPermission = async () => {
+    if (typeof window === "undefined" || !("Notification" in window)) return;
+    try {
+      const perm = await Notification.requestPermission();
+      setNotifPermission(perm);
+    } catch {
+      // Permission error
+    }
+  };
 
   // Auto-dismiss for incoming DM toast
   useEffect(() => {
@@ -1365,6 +1586,18 @@ export default function RoomPage() {
             <BookOpen className="w-3.5 h-3.5" />
             FIELD MANUAL
           </button>
+
+          {room.phase !== "LOBBY" && notifPermission === "default" && (
+            <button
+              id="enable-notifications-btn"
+              onClick={handleRequestNotifPermission}
+              className="px-3 py-1.5 bg-carbon-850 hover:bg-carbon-800 border border-classified-amber text-classified-amber rounded text-xs font-mono font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer animate-pulse"
+              title="Enable transmission notifications when tab or app is in background"
+            >
+              <Bell className="w-3.5 h-3.5" />
+              <span>ENABLE COMMS ALERTS</span>
+            </button>
+          )}
 
           {room.phase !== "LOBBY" && (
             <button
@@ -2579,7 +2812,10 @@ export default function RoomPage() {
           {/* INTELLIGENCE COMMUNICATIONS & FIELD SUITE */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Communication Panel (2 Columns) */}
-            <div className="lg:col-span-2 bg-carbon-900 border border-carbon-800 rounded-lg flex flex-col h-[460px] sm:h-[500px] lg:h-[540px] overflow-hidden">
+            <div
+              id="comms-panel"
+              className="lg:col-span-2 bg-carbon-900 border border-carbon-800 rounded-lg flex flex-col h-[460px] sm:h-[500px] lg:h-[540px] overflow-hidden scroll-mt-24"
+            >
               {/* Incoming Clearance Challenge Modal/Banner */}
               {gameState?.incomingChallenges && gameState.incomingChallenges.length > 0 && (
                 <div
@@ -2951,27 +3187,45 @@ export default function RoomPage() {
                   <span className="text-[9px] font-mono text-red-500/80 uppercase">APPARENT</span>
                 </div>
                 <div className="space-y-2" id="red-team-roster">
-                  {redApparentPlayers.map((player) => (
-                    <div
-                      key={player.id}
-                      className={`flex items-center justify-between p-2 rounded border text-xs font-mono ${
-                        player.id === self.id
-                          ? "bg-red-950/40 border-red-700"
-                          : "bg-carbon-950 border-carbon-800"
-                      }`}
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="text-red-500">•</span>
-                        <span className="font-bold text-gray-200">{player.displayName}</span>
-                        {player.id === self.id && (
-                          <span className="text-[9px] bg-red-900/80 text-red-200 px-1.5 py-0.2 rounded">
-                            YOU
+                  {redApparentPlayers.map((player) => {
+                    const isSelf = player.id === self.id;
+                    return (
+                      <div
+                        key={player.id}
+                        id={`roster-player-${player.id}`}
+                        onClick={() => {
+                          if (!isSelf) handleOpenDMWithOperative(player.id);
+                        }}
+                        className={`flex items-center justify-between p-2.5 rounded border text-xs font-mono transition-all min-h-[44px] ${
+                          isSelf
+                            ? "bg-red-950/40 border-red-700"
+                            : "bg-carbon-950 border-carbon-800 hover:border-classified-amber/70 hover:bg-carbon-850 cursor-pointer active:scale-[0.98] group"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-red-500 shrink-0">•</span>
+                          <span
+                            className={`font-bold truncate ${
+                              isSelf ? "text-gray-200" : "text-gray-200 group-hover:text-classified-amber"
+                            }`}
+                          >
+                            {player.displayName}
                           </span>
-                        )}
+                          {isSelf ? (
+                            <span className="text-[9px] bg-red-900/80 text-red-200 px-1.5 py-0.5 rounded shrink-0">
+                              YOU
+                            </span>
+                          ) : (
+                            <span className="text-[9px] text-gray-400 group-hover:text-classified-amber flex items-center gap-1 opacity-75 group-hover:opacity-100 transition-opacity shrink-0">
+                              <MessageSquare className="w-3 h-3 text-classified-amber" />
+                              <span className="hidden sm:inline">DIRECT LINE →</span>
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[9px] text-gray-500 uppercase shrink-0">ACTIVE</span>
                       </div>
-                      <span className="text-[9px] text-gray-500 uppercase">ACTIVE</span>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 
@@ -2984,27 +3238,45 @@ export default function RoomPage() {
                   <span className="text-[9px] font-mono text-blue-500/80 uppercase">APPARENT</span>
                 </div>
                 <div className="space-y-2" id="blue-team-roster">
-                  {blueApparentPlayers.map((player) => (
-                    <div
-                      key={player.id}
-                      className={`flex items-center justify-between p-2 rounded border text-xs font-mono ${
-                        player.id === self.id
-                          ? "bg-blue-950/40 border-blue-700"
-                          : "bg-carbon-950 border-carbon-800"
-                      }`}
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="text-blue-500">•</span>
-                        <span className="font-bold text-gray-200">{player.displayName}</span>
-                        {player.id === self.id && (
-                          <span className="text-[9px] bg-blue-900/80 text-blue-200 px-1.5 py-0.2 rounded">
-                            YOU
+                  {blueApparentPlayers.map((player) => {
+                    const isSelf = player.id === self.id;
+                    return (
+                      <div
+                        key={player.id}
+                        id={`roster-player-${player.id}`}
+                        onClick={() => {
+                          if (!isSelf) handleOpenDMWithOperative(player.id);
+                        }}
+                        className={`flex items-center justify-between p-2.5 rounded border text-xs font-mono transition-all min-h-[44px] ${
+                          isSelf
+                            ? "bg-blue-950/40 border-blue-700"
+                            : "bg-carbon-950 border-carbon-800 hover:border-classified-amber/70 hover:bg-carbon-850 cursor-pointer active:scale-[0.98] group"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-blue-500 shrink-0">•</span>
+                          <span
+                            className={`font-bold truncate ${
+                              isSelf ? "text-gray-200" : "text-gray-200 group-hover:text-classified-amber"
+                            }`}
+                          >
+                            {player.displayName}
                           </span>
-                        )}
+                          {isSelf ? (
+                            <span className="text-[9px] bg-blue-900/80 text-blue-200 px-1.5 py-0.5 rounded shrink-0">
+                              YOU
+                            </span>
+                          ) : (
+                            <span className="text-[9px] text-gray-400 group-hover:text-classified-amber flex items-center gap-1 opacity-75 group-hover:opacity-100 transition-opacity shrink-0">
+                              <MessageSquare className="w-3 h-3 text-classified-amber" />
+                              <span className="hidden sm:inline">DIRECT LINE →</span>
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[9px] text-gray-500 uppercase shrink-0">ACTIVE</span>
                       </div>
-                      <span className="text-[9px] text-gray-500 uppercase">ACTIVE</span>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -3234,12 +3506,10 @@ export default function RoomPage() {
         <div
           id="incoming-dm-toast"
           onClick={() => {
-            setActiveTab("DM");
-            setSelectedPeerId(dmAlert.senderId);
-            setLastReadTimestamps((prev) => ({ ...prev, DM: Date.now() }));
+            handleOpenDMWithOperative(dmAlert.senderId);
             setDmAlert(null);
           }}
-          className="fixed top-20 right-4 z-40 max-w-sm w-full bg-carbon-900/95 border-2 border-classified-amber rounded-lg p-3.5 shadow-2xl font-mono cursor-pointer animate-in slide-in-from-top-3 duration-200 hover:bg-carbon-850 backdrop-blur-sm"
+          className="fixed top-20 right-4 z-40 max-w-sm w-full bg-carbon-900/95 border-2 border-classified-amber rounded-lg p-3.5 shadow-2xl font-mono cursor-pointer animate-in slide-in-from-top-3 duration-200 hover:bg-carbon-850 backdrop-blur-sm active:scale-[0.98] transition-transform"
         >
           <div className="flex items-center justify-between mb-1.5">
             <div className="flex items-center gap-1.5 text-classified-amber text-xs font-bold uppercase tracking-wider">
