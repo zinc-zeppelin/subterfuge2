@@ -4,10 +4,10 @@ import { randomUUID } from "crypto";
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { code: string } }
+  { params }: { params: Promise<{ code: string }> }
 ) {
   try {
-    const { code } = params;
+    const { code } = await params;
     const body = await req.json();
     const { playerName } = body;
 
