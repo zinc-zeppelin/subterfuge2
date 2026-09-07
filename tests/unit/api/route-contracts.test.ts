@@ -238,7 +238,7 @@ describe("API Route HTTP Contracts & Input Validation (Unit)", () => {
       const postRes = await postMessageHandler(postReq, { params: { code } });
       expect(postRes.status).toBe(200);
 
-      const getReq = new NextRequest(`http://localhost:3000/api/rooms/${code}/messages?channelType=PUBLIC`, {
+      const getReq = new NextRequest(`http://localhost:3000/api/rooms/${code}/messages?channel=PUBLIC`, {
         method: "GET",
         headers: { "x-session-token": tokens[1] },
       });
