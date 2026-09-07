@@ -112,9 +112,11 @@ test.describe("Infiltration — Deployment & Role Assignment", () => {
     await codewordInput.press("Enter");
     await expect(modal).toBeVisible();
 
-    // Other operative's page sees Host as IN BRIEFING
+    // Other operative's page sees Host specifically as IN BRIEFING
     const op1Page = harness.sessions[1].page;
-    await expect(op1Page.locator("text=IN BRIEFING").first()).toBeVisible({ timeout: 10000 });
+    const hostCallsign = harness.sessions[0].callsign;
+    const hostRow = op1Page.locator("#red-team-roster, #blue-team-roster").locator(`div:has-text("${hostCallsign}")`).first();
+    await expect(hostRow.locator("text=IN BRIEFING")).toBeVisible({ timeout: 10000 });
 
     // Attempt 2: Fill authentic codeword
     await codewordInput.fill(authenticWord);
@@ -126,6 +128,9 @@ test.describe("Infiltration — Deployment & Role Assignment", () => {
 
     // Host station is now fully operational with decrypt button
     await expect(hostPage.locator("#decrypt-word-btn")).toBeVisible();
+
+    // Other operative sees host transition to ACTIVE
+    await expect(hostRow.locator("text=ACTIVE")).toBeVisible({ timeout: 10000 });
   });
 });
 

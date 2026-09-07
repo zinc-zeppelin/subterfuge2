@@ -243,45 +243,47 @@ test.describe("Lobby — Management, Validation & Security Bounds", () => {
       pages.push(pg);
     }
 
-    const hostPage = pages[0];
-    await hostPage.goto(`${url}/`);
-    await hostPage.fill("#callsign-input", callsigns[0]);
-    await hostPage.click("#create-room-btn");
-    await hostPage.waitForURL(/\/room\/[A-Z0-9]{6}/);
+    try {
+      const hostPage = pages[0];
+      await hostPage.goto(`${url}/`);
+      await hostPage.fill("#callsign-input", callsigns[0]);
+      await hostPage.click("#create-room-btn");
+      await hostPage.waitForURL(/\/room\/[A-Z0-9]{6}/);
 
-    const roomCode = hostPage.url().match(/\/room\/([A-Z0-9]{6})/)?.[1];
-    expect(roomCode).toBeTruthy();
+      const roomCode = hostPage.url().match(/\/room\/([A-Z0-9]{6})/)?.[1];
+      expect(roomCode).toBeTruthy();
 
-    // Join remaining 6 operatives
-    for (let i = 1; i < 7; i++) {
-      const pg = pages[i];
-      await pg.goto(`${url}/room/${roomCode}`);
-      await expect(pg.locator("#join-operation-form")).toBeVisible({ timeout: 10000 });
-      await pg.fill("#join-callsign-input", callsigns[i]);
-      await pg.click("#join-room-submit-btn");
-      await expect(pg.locator("#player-roster > div")).toHaveCount(i + 1, { timeout: 10000 });
-    }
+      // Join remaining 6 operatives
+      for (let i = 1; i < 7; i++) {
+        const pg = pages[i];
+        await pg.goto(`${url}/room/${roomCode}`);
+        await expect(pg.locator("#join-operation-form")).toBeVisible({ timeout: 10000 });
+        await pg.fill("#join-callsign-input", callsigns[i]);
+        await pg.click("#join-room-submit-btn");
+        await expect(pg.locator("#player-roster > div")).toHaveCount(i + 1, { timeout: 10000 });
+      }
 
-    // Toggle ready for all 7
-    for (let i = 0; i < 7; i++) {
-      await pages[i].click("#toggle-ready-btn");
-      await expect(pages[i].locator("#toggle-ready-btn")).toContainText("CANCEL READY STATUS", { timeout: 15000 });
-    }
+      // Toggle ready for all 7
+      for (let i = 0; i < 7; i++) {
+        await pages[i].click("#toggle-ready-btn");
+        await expect(pages[i].locator("#toggle-ready-btn")).toContainText("CANCEL READY STATUS", { timeout: 15000 });
+      }
 
-    // Host sees 7/7 READY (ODD OR EVEN)
-    await expect(hostPage.getByText("7/7 READY")).toBeVisible({ timeout: 15000 });
-    await expect(hostPage.locator("#start-operation-btn")).toBeEnabled({ timeout: 15000 });
+      // Host sees 7/7 READY (ODD OR EVEN)
+      await expect(hostPage.getByText("7/7 READY")).toBeVisible({ timeout: 15000 });
+      await expect(hostPage.locator("#start-operation-btn")).toBeEnabled({ timeout: 15000 });
 
-    // Host commences operation
-    await hostPage.click("#start-operation-btn");
+      // Host commences operation
+      await hostPage.click("#start-operation-btn");
 
-    // All 7 players transition to INFILTRATION
-    for (let i = 0; i < 7; i++) {
-      await expect(pages[i].locator("text=PHASE: INFILTRATION")).toBeVisible({ timeout: 15000 });
-    }
-
-    for (const ctx of contexts) {
-      await ctx.close();
+      // All 7 players transition to INFILTRATION
+      for (let i = 0; i < 7; i++) {
+        await expect(pages[i].locator("text=PHASE: INFILTRATION")).toBeVisible({ timeout: 15000 });
+      }
+    } finally {
+      for (const ctx of contexts) {
+        await ctx.close().catch(() => {});
+      }
     }
   });
 });

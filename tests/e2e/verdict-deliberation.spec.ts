@@ -23,7 +23,7 @@ test.describe("Verdict — Collaborative Board, Two-Member Consensus & Scoring",
   });
 
   test("supports collaborative word proposals, enforces two-member consensus lock-in, scores with mission meter mechanics, and transitions to DEBRIEF when both verdicts are locked", async ({ baseURL }) => {
-    test.setTimeout(180000);
+    test.setTimeout(240000);
     const url = baseURL || "http://localhost:3000";
 
     await harness.initSessions([
@@ -234,7 +234,15 @@ test.describe("Verdict — Collaborative Board, Two-Member Consensus & Scoring",
       op2Page.locator("#transmit-proposal-btn").click(),
     ]);
 
-    // Verify both browsers handle the outcome gracefully without deadlock
+    // Both confirmation modals dismiss upon initiating transmission
+    await expect(op1Page.locator("#verdict-confirmation-modal")).toBeHidden({ timeout: 10000 });
+    await expect(op2Page.locator("#verdict-confirmation-modal")).toBeHidden({ timeout: 10000 });
+
+    // Assert that submitting state has ended on both stations
+    await expect(op1Page.locator("#lock-in-verdict-btn")).not.toContainText("TRANSMITTING PROPOSAL...", { timeout: 15000 });
+    await expect(op2Page.locator("#lock-in-verdict-btn")).not.toContainText("TRANSMITTING PROPOSAL...", { timeout: 15000 });
+
+    // Verify both browsers handle the outcome gracefully without deadlock or errors
     await expect(op1Page.locator("#pending-proposal-card")).toBeVisible({ timeout: 15000 });
     await expect(op2Page.locator("#pending-proposal-card")).toBeVisible({ timeout: 15000 });
 
@@ -242,11 +250,14 @@ test.describe("Verdict — Collaborative Board, Two-Member Consensus & Scoring",
     await expect(op1Page.locator("#pending-proposal-card")).toContainText("1/2 CONFIRMED");
     await expect(op2Page.locator("#pending-proposal-card")).toContainText("1/2 CONFIRMED");
 
-    // Whichever operative is not the proposer confirms the proposal
-    const op1CanConfirm = await op1Page.locator("#confirm-verdict-btn").isVisible().catch(() => false);
-    const op2CanConfirm = await op2Page.locator("#confirm-verdict-btn").isVisible().catch(() => false);
+    // Wait for the non-proposer station to sync and display the confirmation button
+    await expect.poll(async () => {
+      const op1Can = await op1Page.locator("#confirm-verdict-btn").isVisible().catch(() => false);
+      const op2Can = await op2Page.locator("#confirm-verdict-btn").isVisible().catch(() => false);
+      return op1Can ? "op1" : op2Can ? "op2" : null;
+    }, { timeout: 15000 }).not.toBeNull();
 
-    expect(op1CanConfirm || op2CanConfirm).toBe(true);
+    const op1CanConfirm = await op1Page.locator("#confirm-verdict-btn").isVisible().catch(() => false);
     if (op1CanConfirm) {
       await op1Page.click("#confirm-verdict-btn");
     } else {

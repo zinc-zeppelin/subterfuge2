@@ -213,6 +213,7 @@ test.describe("Session Recovery — Personal Links, Auto-Resume & Recovery Porta
     const url = baseURL || "http://localhost:3000";
 
     const harness = new SixPlayerHarness(browser);
+    let recovContext: import("@playwright/test").BrowserContext | null = null;
     try {
       await harness.initSessions([
         "Alpha-Recov",
@@ -265,7 +266,7 @@ test.describe("Session Recovery — Personal Links, Auto-Resume & Recovery Porta
       await harness.sessions[red2].context.close();
 
       // Red 2 reconnects in a fresh context using personal recovery link
-      const recovContext = await browser.newContext();
+      recovContext = await browser.newContext();
       const recovPage = await recovContext.newPage();
       await recovPage.goto(`${url}/room/${roomCode}?token=${red2Token}`);
 
@@ -285,9 +286,10 @@ test.describe("Session Recovery — Personal Links, Auto-Resume & Recovery Porta
       // Verify verdict is now locked (2/2) for Red faction
       await expect(recovPage.locator("#verdict-locked-badge")).toBeVisible({ timeout: 15000 });
       await expect(recovPage.locator("#verdict-locked-badge")).toContainText("OFFICIAL ASSESSMENT LOCKED IN");
-
-      await recovContext.close();
     } finally {
+      if (recovContext) {
+        await recovContext.close().catch(() => {});
+      }
       await harness.teardown();
     }
   });
