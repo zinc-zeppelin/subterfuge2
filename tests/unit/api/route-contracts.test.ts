@@ -225,8 +225,9 @@ describe("API Route HTTP Contracts & Input Validation (Unit)", () => {
 
   describe("Messages & Comms API (/messages, /messages/burn)", () => {
     it("allows sending and receiving public transmissions", async () => {
-      const { code, tokens } = await setupActiveRoom();
+      const { code, tokens, room } = await setupActiveRoom();
 
+      // Post a public transmission
       const postReq = new NextRequest(`http://localhost:3000/api/rooms/${code}/messages`, {
         method: "POST",
         headers: { "x-session-token": tokens[0] },
@@ -238,14 +239,31 @@ describe("API Route HTTP Contracts & Input Validation (Unit)", () => {
       const postRes = await postMessageHandler(postReq, { params: { code } });
       expect(postRes.status).toBe(200);
 
+      const host = room.players[0];
+      const teamChannel = host.apparentTeam === "RED" ? "TEAM_RED" : "TEAM_BLUE";
+
+      // Post a team radio transmission from the host
+      const teamPostReq = new NextRequest(`http://localhost:3000/api/rooms/${code}/messages`, {
+        method: "POST",
+        headers: { "x-session-token": tokens[0] },
+        body: JSON.stringify({
+          channelType: teamChannel,
+          content: "Classified team radio chatter",
+        }),
+      });
+      const teamPostRes = await postMessageHandler(teamPostReq, { params: { code } });
+      expect(teamPostRes.status).toBe(200);
+
+      // Query with channel filter: should include public and exclude team
       const getReq = new NextRequest(`http://localhost:3000/api/rooms/${code}/messages?channel=PUBLIC`, {
         method: "GET",
-        headers: { "x-session-token": tokens[1] },
+        headers: { "x-session-token": tokens[0] },
       });
       const getRes = await getMessagesHandler(getReq, { params: { code } });
       expect(getRes.status).toBe(200);
       const data = await getRes.json();
       expect(data.messages.some((m: any) => m.content === "Testing wire broadcast")).toBe(true);
+      expect(data.messages.some((m: any) => m.content === "Classified team radio chatter")).toBe(false);
     });
 
     it("burns DM conversation history between two operatives", async () => {
