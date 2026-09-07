@@ -9,6 +9,7 @@
 
 import { test, expect } from "@playwright/test";
 import path from "path";
+import { SixPlayerHarness } from "../harness/multiplayer-harness";
 
 const screenshotsDir = path.resolve(process.cwd(), "screenshots");
 
@@ -202,5 +203,94 @@ test.describe("Session Recovery — Personal Links, Auto-Resume & Recovery Porta
     await p5Context.close();
     await p6Context.close();
     await unauthContext.close();
+  });
+
+  test("restores active deliberation slate and allows consensus confirmation after mid-game disconnect in VERDICT phase", async ({
+    browser,
+    baseURL,
+  }) => {
+    test.setTimeout(180000);
+    const url = baseURL || "http://localhost:3000";
+
+    const harness = new SixPlayerHarness(browser);
+    let recovContext: import("@playwright/test").BrowserContext | null = null;
+    try {
+      await harness.initSessions([
+        "Alpha-Recov",
+        "Bravo-Recov",
+        "Charlie-Recov",
+        "Delta-Recov",
+        "Echo-Recov",
+        "Foxtrot-Recov",
+      ]);
+
+      const roomCode = await harness.hostCreatesRoom(url);
+      await harness.joinRemainingOperatives(url);
+      await harness.setAllReady();
+      await harness.hostStartsOperation();
+      await harness.expectAllInInfiltrationPhase();
+
+      // Collect dossier for Red team identification
+      const dossiers = [];
+      for (let i = 0; i < 6; i++) {
+        dossiers.push({ idx: i, ...(await harness.getPlayerDossier(i)) });
+      }
+      const redOps = dossiers.filter((d) => d.apparentTeam === "RED");
+      const red1 = redOps[0].idx;
+      const red2 = redOps[1].idx;
+
+      // Warp to VERDICT phase
+      await harness.warpTime("VERDICT");
+      await expect(harness.sessions[red1].page.locator("#room-phase-badge")).toContainText("VERDICT", { timeout: 15000 });
+      await expect(harness.sessions[red2].page.locator("#room-phase-badge")).toContainText("VERDICT", { timeout: 15000 });
+
+      // Red 1 fills 6 guesses and proposes verdict
+      const guessWords = ["ALPHA", "BRAVO", "CHARLIE", "DELTA", "ECHO", "FOXTROT"];
+      for (const w of guessWords) {
+        await harness.operativeAddVerdictGuess(red1, w);
+      }
+      await harness.operativeProposeVerdict(red1);
+
+      // Verify pending proposal is visible to Red 2
+      const red2Page = harness.sessions[red2].page;
+      await expect(red2Page.locator("#pending-proposal-card")).toBeVisible({ timeout: 10000 });
+      await expect(red2Page.locator("#pending-proposal-card")).toContainText("1/2 CONFIRMED");
+
+      // Save Red 2's session token from storage
+      const red2Token = await red2Page.evaluate((code) => {
+        return sessionStorage.getItem(`subterfuge_session_${code}`);
+      }, roomCode);
+      expect(red2Token).toBeTruthy();
+
+      // Simulate Red 2 disconnect (closing browser context)
+      await harness.sessions[red2].context.close();
+
+      // Red 2 reconnects in a fresh context using personal recovery link
+      recovContext = await browser.newContext();
+      const recovPage = await recovContext.newPage();
+      await recovPage.goto(`${url}/room/${roomCode}?token=${red2Token}`);
+
+      // Verify Red 2 station is restored in VERDICT phase
+      await expect(recovPage.locator("#room-phase-badge")).toContainText("VERDICT", { timeout: 15000 });
+      await expect(recovPage.getByText(harness.sessions[red2].callsign).first()).toBeVisible();
+
+      // Crucial: Verify the pending 1/2 proposal card survived and is immediately visible to reconnected operative
+      await expect(recovPage.locator("#pending-proposal-card")).toBeVisible({ timeout: 15000 });
+      await expect(recovPage.locator("#pending-proposal-card")).toContainText("1/2 CONFIRMED");
+      const confirmBtn = recovPage.locator("#confirm-verdict-btn");
+      await expect(confirmBtn).toBeVisible();
+
+      // Red 2 confirms the proposal from the recovered station
+      await confirmBtn.click();
+
+      // Verify verdict is now locked (2/2) for Red faction
+      await expect(recovPage.locator("#verdict-locked-badge")).toBeVisible({ timeout: 15000 });
+      await expect(recovPage.locator("#verdict-locked-badge")).toContainText("OFFICIAL ASSESSMENT LOCKED IN");
+    } finally {
+      if (recovContext) {
+        await recovContext.close().catch(() => {});
+      }
+      await harness.teardown();
+    }
   });
 });

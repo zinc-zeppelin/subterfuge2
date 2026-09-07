@@ -82,6 +82,56 @@ test.describe("Infiltration — Deployment & Role Assignment", () => {
     expect(rosterText).not.toContain("MOLE");
     expect(rosterText).not.toContain("SPYMASTER");
   });
+
+  test("validates negative codeword entry on Operational Briefing modal before authentic burning", async ({ baseURL }) => {
+    test.setTimeout(120000);
+    const url = baseURL || "http://localhost:3000";
+
+    await harness.initSessions();
+    await harness.hostCreatesRoom(url);
+    await harness.joinRemainingOperatives(url);
+    await harness.setAllReady();
+    await harness.hostStartsOperation();
+
+    const hostPage = harness.sessions[0].page;
+    const modal = hostPage.locator("#operational-briefing-modal");
+    await expect(modal).toBeVisible({ timeout: 15000 });
+
+    // Extract authentic assigned word from briefing
+    const authenticWord = (await hostPage.locator("#briefing-assigned-word").innerText()).trim();
+    expect(authenticWord.length).toBeGreaterThan(1);
+
+    const codewordInput = hostPage.locator("#briefing-codeword-input");
+    const burnBtn = hostPage.locator("#burn-briefing-btn");
+
+    // Attempt 1: Type incorrect codeword
+    await codewordInput.fill("BOGUS_DECOY_WORD");
+    await expect(burnBtn).toBeDisabled();
+
+    // Pressing Enter with incorrect codeword does not dismiss modal
+    await codewordInput.press("Enter");
+    await expect(modal).toBeVisible();
+
+    // Other operative's page sees Host specifically as IN BRIEFING
+    const op1Page = harness.sessions[1].page;
+    const hostCallsign = harness.sessions[0].callsign;
+    const hostRow = op1Page.locator("#red-team-roster, #blue-team-roster").locator(`div:has-text("${hostCallsign}")`).first();
+    await expect(hostRow.locator("text=IN BRIEFING")).toBeVisible({ timeout: 10000 });
+
+    // Attempt 2: Fill authentic codeword
+    await codewordInput.fill(authenticWord);
+    await expect(burnBtn).toBeEnabled({ timeout: 5000 });
+
+    // Click to authenticate and burn briefing
+    await burnBtn.click();
+    await expect(modal).not.toBeVisible({ timeout: 5000 });
+
+    // Host station is now fully operational with decrypt button
+    await expect(hostPage.locator("#decrypt-word-btn")).toBeVisible();
+
+    // Other operative sees host transition to ACTIVE
+    await expect(hostRow.locator("text=ACTIVE")).toBeVisible({ timeout: 10000 });
+  });
 });
 
 // ---------------------------------------------------------------------------
