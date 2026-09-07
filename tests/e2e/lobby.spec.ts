@@ -110,6 +110,7 @@ test.describe("Lobby — Tab Isolation & Direct Join", () => {
     await expect(p2Page.locator("#player-roster")).toContainText("Commander-P1");
     await expect(p2Page.locator("#player-roster")).toContainText("Infiltrator-P2");
     await expect(p1Page.locator("#player-roster > div")).toHaveCount(2, { timeout: 10000 });
+    await expect(p1Page.locator("#player-roster")).toContainText("Infiltrator-P2");
 
     // Verify identity isolation (YOU badge)
     const p1You = p1Page.locator("#player-roster > div", { hasText: "Commander-P1" });
@@ -214,5 +215,73 @@ test.describe("Lobby — Management, Validation & Security Bounds", () => {
 
     await hostContext.close();
     await p2Context.close();
+  });
+
+  test("orchestrates 7 operatives joining with odd player count and commencement readiness", async ({
+    browser,
+    baseURL,
+  }) => {
+    test.setTimeout(90000);
+    const url = baseURL || "http://localhost:3000";
+
+    const contexts = [];
+    const pages = [];
+    const callsigns = [
+      "Commander-01",
+      "Operative-02",
+      "Operative-03",
+      "Operative-04",
+      "Operative-05",
+      "Operative-06",
+      "Operative-07",
+    ];
+
+    for (let i = 0; i < 7; i++) {
+      const ctx = await browser.newContext();
+      contexts.push(ctx);
+      const pg = await ctx.newPage();
+      pages.push(pg);
+    }
+
+    const hostPage = pages[0];
+    await hostPage.goto(`${url}/`);
+    await hostPage.fill("#callsign-input", callsigns[0]);
+    await hostPage.click("#create-room-btn");
+    await hostPage.waitForURL(/\/room\/[A-Z0-9]{6}/);
+
+    const roomCode = hostPage.url().match(/\/room\/([A-Z0-9]{6})/)?.[1];
+    expect(roomCode).toBeTruthy();
+
+    // Join remaining 6 operatives
+    for (let i = 1; i < 7; i++) {
+      const pg = pages[i];
+      await pg.goto(`${url}/room/${roomCode}`);
+      await expect(pg.locator("#join-operation-form")).toBeVisible({ timeout: 10000 });
+      await pg.fill("#join-callsign-input", callsigns[i]);
+      await pg.click("#join-room-submit-btn");
+      await expect(pg.locator("#player-roster > div")).toHaveCount(i + 1, { timeout: 10000 });
+    }
+
+    // Toggle ready for all 7
+    for (let i = 0; i < 7; i++) {
+      await pages[i].click("#toggle-ready-btn");
+      await expect(pages[i].locator("#toggle-ready-btn")).toContainText("CANCEL READY STATUS", { timeout: 15000 });
+    }
+
+    // Host sees 7/7 READY (ODD OR EVEN)
+    await expect(hostPage.getByText("7/7 READY")).toBeVisible({ timeout: 15000 });
+    await expect(hostPage.locator("#start-operation-btn")).toBeEnabled({ timeout: 15000 });
+
+    // Host commences operation
+    await hostPage.click("#start-operation-btn");
+
+    // All 7 players transition to INFILTRATION
+    for (let i = 0; i < 7; i++) {
+      await expect(pages[i].locator("text=PHASE: INFILTRATION")).toBeVisible({ timeout: 15000 });
+    }
+
+    for (const ctx of contexts) {
+      await ctx.close();
+    }
   });
 });

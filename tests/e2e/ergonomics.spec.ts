@@ -186,4 +186,41 @@ test.describe("Ergonomics — Playtest Polish, Anti-Shoulder-Surfing & Dev HUD",
     await op1.page.click("#dev-warp-debrief-btn");
     await expect(op1.page.locator("#debrief-winner-banner")).toBeVisible({ timeout: 10000 });
   });
+
+  test("supports keyboard ergonomics with Escape key dismissal across tactical modals", async ({ baseURL }) => {
+    test.setTimeout(120000);
+    const url = baseURL || "http://localhost:3000";
+
+    await harness.initSessions();
+    await harness.hostCreatesRoom(url);
+    await harness.joinRemainingOperatives(url);
+    await harness.setAllReady();
+    await harness.hostStartsOperation();
+    await harness.expectAllInInfiltrationPhase();
+
+    // Identify Mole operative for decoy modal verification
+    let moleIdx = -1;
+    for (let i = 0; i < 6; i++) {
+      const dossier = await harness.getPlayerDossier(i);
+      if (dossier.role === "MOLE") {
+        moleIdx = i;
+        break;
+      }
+    }
+    expect(moleIdx).toBeGreaterThanOrEqual(0);
+
+    const molePage = harness.sessions[moleIdx].page;
+
+    // 1. Field Manual Escape dismissal
+    await molePage.click("#field-manual-btn");
+    await expect(molePage.locator("#field-manual-modal")).toBeVisible({ timeout: 5000 });
+    await molePage.keyboard.press("Escape");
+    await expect(molePage.locator("#field-manual-modal")).toBeHidden({ timeout: 5000 });
+
+    // 2. Tactical Decoy Word modal Escape dismissal
+    await molePage.click("#configure-spoof-word-btn");
+    await expect(molePage.locator("#spoof-word-modal")).toBeVisible({ timeout: 5000 });
+    await molePage.keyboard.press("Escape");
+    await expect(molePage.locator("#spoof-word-modal")).toBeHidden({ timeout: 5000 });
+  });
 });

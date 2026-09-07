@@ -176,4 +176,85 @@ test.describe("Verdict — Collaborative Board, Two-Member Consensus & Scoring",
     // Both verdicts are in -> Automatic transition to DEBRIEF phase
     await harness.expectDebriefViewOnAll();
   });
+
+  test("handles concurrent competing slate proposals from multiple teammates without deadlock", async ({ baseURL }) => {
+    test.setTimeout(180000);
+    const url = baseURL || "http://localhost:3000";
+
+    await harness.initSessions([
+      "Viper-Race1",
+      "Shadow-Race2",
+      "Hawk-Race3",
+      "Ghost-Race4",
+      "Specter-Race5",
+      "Raven-Race6",
+    ]);
+
+    await harness.hostCreatesRoom(url);
+    await harness.joinRemainingOperatives(url);
+    await harness.setAllReady();
+    await harness.hostStartsOperation();
+    await harness.expectAllInInfiltrationPhase();
+
+    // Identify Red team operatives
+    const dossiers = [];
+    for (let i = 0; i < 6; i++) {
+      dossiers.push({ idx: i, ...(await harness.getPlayerDossier(i)) });
+    }
+    const redOps = dossiers.filter((d) => d.apparentTeam === "RED");
+    const redOp1 = redOps[0].idx;
+    const redOp2 = redOps[1].idx;
+
+    // Advance to VERDICT
+    await harness.warpTime("VERDICT");
+    const op1Page = harness.sessions[redOp1].page;
+    const op2Page = harness.sessions[redOp2].page;
+
+    await expect(op1Page.locator("#room-phase-badge")).toContainText("VERDICT", { timeout: 15000 });
+    await expect(op2Page.locator("#room-phase-badge")).toContainText("VERDICT", { timeout: 15000 });
+
+    // Populate 6 slate guesses
+    const testWords = ["CODEONE", "CODETWO", "CODETHREE", "CODEFOUR", "CODEFIVE", "CODESIX"];
+    for (const word of testWords) {
+      await harness.operativeAddVerdictGuess(redOp1, word);
+    }
+    await expect(op1Page.locator("#guesses-count")).toContainText("6/6");
+    await expect(op2Page.locator("#guesses-count")).toContainText("6/6");
+
+    // Both teammates open the verdict confirmation modal
+    await op1Page.click("#lock-in-verdict-btn");
+    await op2Page.click("#lock-in-verdict-btn");
+
+    await expect(op1Page.locator("#verdict-confirmation-modal")).toBeVisible({ timeout: 5000 });
+    await expect(op2Page.locator("#verdict-confirmation-modal")).toBeVisible({ timeout: 5000 });
+
+    // Race condition: Both teammates transmit their proposals simultaneously via Promise.all
+    await Promise.all([
+      op1Page.locator("#transmit-proposal-btn").click(),
+      op2Page.locator("#transmit-proposal-btn").click(),
+    ]);
+
+    // Verify both browsers handle the outcome gracefully without deadlock
+    await expect(op1Page.locator("#pending-proposal-card")).toBeVisible({ timeout: 15000 });
+    await expect(op2Page.locator("#pending-proposal-card")).toBeVisible({ timeout: 15000 });
+
+    // One of them is the recorded proposer, and consensus is at 1/2 CONFIRMED
+    await expect(op1Page.locator("#pending-proposal-card")).toContainText("1/2 CONFIRMED");
+    await expect(op2Page.locator("#pending-proposal-card")).toContainText("1/2 CONFIRMED");
+
+    // Whichever operative is not the proposer confirms the proposal
+    const op1CanConfirm = await op1Page.locator("#confirm-verdict-btn").isVisible().catch(() => false);
+    const op2CanConfirm = await op2Page.locator("#confirm-verdict-btn").isVisible().catch(() => false);
+
+    expect(op1CanConfirm || op2CanConfirm).toBe(true);
+    if (op1CanConfirm) {
+      await op1Page.click("#confirm-verdict-btn");
+    } else {
+      await op2Page.click("#confirm-verdict-btn");
+    }
+
+    // Official verdict is now locked (2/2) for both Red teammates
+    await harness.expectVerdictLocked(redOp1);
+    await harness.expectVerdictLocked(redOp2);
+  });
 });
