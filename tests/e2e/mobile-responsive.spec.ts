@@ -1,6 +1,15 @@
+/**
+ * Domain: Mobile Responsive Audit
+ *
+ * Covers:
+ *  - iOS Safari (WebKit) & Android Chrome (Chromium) viewports
+ *  - Zero-zoom inputs, tap targets (>= 44px), touch gestures
+ *  - Horizontal overflow prevention, touch-action & hold-to-decrypt (was Slice 12)
+ */
+
 import { test, expect } from "@playwright/test";
 
-test.describe("Slice 12: Mobile Browser Audit (iOS Safari & Android Chrome)", () => {
+test.describe("Mobile — Browser Audit (iOS Safari & Android Chrome)", () => {
   test("verifies zero-zoom inputs, tap targets, touch gestures, and viewport constraints", async ({
     page,
     request,
@@ -61,7 +70,7 @@ test.describe("Slice 12: Mobile Browser Audit (iOS Safari & Android Chrome)", ()
     });
     expect(hasHorizontalOverflowLobby).toBe(true);
 
-    // 3. Fast-join 5 other operatives via direct API so room meets minimum 6 operatives
+    // 3. Fast-join 5 other operatives via direct API to meet 6-player minimum
     const extraCallsigns = ["Mobile-Bravo", "Mobile-Charlie", "Mobile-Delta", "Mobile-Echo", "Mobile-Foxtrot"];
     for (const callsign of extraCallsigns) {
       const joinRes = await request.post(`/api/rooms/${roomCode}/join`, {
@@ -155,7 +164,6 @@ test.describe("Slice 12: Mobile Browser Audit (iOS Safari & Android Chrome)", ()
     await page.click("#field-manual-btn");
     await expect(page.locator("#field-manual-modal")).toBeVisible();
 
-    // Verify close button tap target
     const closeBtnBox = await page.locator("#close-field-manual-btn").boundingBox();
     expect(closeBtnBox).not.toBeNull();
 

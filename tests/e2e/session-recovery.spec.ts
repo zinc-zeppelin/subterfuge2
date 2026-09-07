@@ -1,9 +1,18 @@
+/**
+ * Domain: Session Recovery & Multi-Device Continuity
+ *
+ * Covers:
+ *  - Personal recovery links, URL token scrubbing & duplicate callsign protection (was Slice 10)
+ *  - Mid-game auto-resume via localStorage (mobile tab closure emulation)
+ *  - Mid-game Recovery Portal for unauthenticated visitors during INFILTRATION
+ */
+
 import { test, expect } from "@playwright/test";
 import path from "path";
 
-test.describe("Slice 10: Jackbox-Style Personal Recovery Links, Device Auto-Resume & Mid-Game Recovery Portal", () => {
-  const screenshotsDir = path.resolve(process.cwd(), "screenshots");
+const screenshotsDir = path.resolve(process.cwd(), "screenshots");
 
+test.describe("Session Recovery — Personal Links, Auto-Resume & Recovery Portal", () => {
   test("verifies personal recovery link, url token scrubbing, duplicate callsign protection, mid-game auto-resume, and recovery portal", async ({
     browser,
     baseURL,
@@ -43,10 +52,7 @@ test.describe("Slice 10: Jackbox-Style Personal Recovery Links, Device Auto-Resu
     }, roomCode);
     expect(p1Token).toBeTruthy();
 
-    // Capture Screenshot of Lobby with Personal Recovery Link
-    await p1Page.screenshot({
-      path: path.join(screenshotsDir, "17-lobby-personal-recovery-link.png"),
-    });
+    await p1Page.screenshot({ path: path.join(screenshotsDir, "17-lobby-personal-recovery-link.png") });
 
     // Step 3: P2 Joins
     const p2Context = await browser.newContext({
@@ -78,7 +84,6 @@ test.describe("Slice 10: Jackbox-Style Personal Recovery Links, Device Auto-Resu
     await duplicateContext.close();
 
     // Step 5: Cross-Browser Personal Recovery Link with URL Scrubbing
-    // In a completely fresh browser context, open personal recovery link: /room/[code]?token=[p1Token]
     const freshContext = await browser.newContext();
     const freshPage = await freshContext.newPage();
     await freshPage.goto(`${url}/room/${roomCode}?token=${p1Token}`);
@@ -96,7 +101,7 @@ test.describe("Slice 10: Jackbox-Style Personal Recovery Links, Device Auto-Resu
     await expect(p1InRoster.locator("text=YOU")).toBeVisible();
     await freshContext.close();
 
-    // Step 6: Add 4 more players (P3, P4, P5, P6) to meet 6-player requirement and start Infiltration
+    // Step 6: Add 4 more players to meet 6-player requirement and start Infiltration
     const p3Context = await browser.newContext();
     const p3Page = await p3Context.newPage();
     await p3Page.goto(`${url}/room/${roomCode}`);
@@ -165,10 +170,7 @@ test.describe("Slice 10: Jackbox-Style Personal Recovery Links, Device Auto-Resu
     await expect(p1Page.locator("#top-secret-dossier")).toBeVisible();
     await expect(p1Page.getByText("Commander-Alpha").first()).toBeVisible();
 
-    // Capture Screenshot of resumed station
-    await p1Page.screenshot({
-      path: path.join(screenshotsDir, "19-resumed-station-after-purge.png"),
-    });
+    await p1Page.screenshot({ path: path.join(screenshotsDir, "19-resumed-station-after-purge.png") });
 
     // Step 9: Mid-Game Recovery Portal (Clean Browser Context without storage)
     const unauthContext = await browser.newContext();
@@ -181,10 +183,7 @@ test.describe("Slice 10: Jackbox-Style Personal Recovery Links, Device Auto-Resu
     await expect(unauthPage.locator("#recovery-token-input")).toBeVisible();
     await expect(unauthPage.locator("#resume-station-btn")).toBeVisible();
 
-    // Capture Screenshot of Mid-Game Recovery Portal
-    await unauthPage.screenshot({
-      path: path.join(screenshotsDir, "18-mid-game-recovery-portal.png"),
-    });
+    await unauthPage.screenshot({ path: path.join(screenshotsDir, "18-mid-game-recovery-portal.png") });
 
     // Paste P2's personal link or token into the portal to reclaim station
     await unauthPage.fill("#recovery-token-input", `${url}/room/${roomCode}?token=${p2Token}`);

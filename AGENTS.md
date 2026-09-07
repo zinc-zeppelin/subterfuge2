@@ -13,7 +13,7 @@ This document serves as the primary technical onboarding guide and operational s
 - **Language:** TypeScript (strict mode)
 - **Styling:** Tailwind CSS with custom thematic extensions (`classified-amber`, `classified-crimson`, `classified-terminal`, `carbon-*` palette)
 - **Icons:** `lucide-react`
-- **Testing:** Playwright E2E Test Suite (multi-context concurrent client testing)
+- **Testing:** Vitest unit tests (`npm run test`) + Playwright E2E multi-context test suite (`npm run test:e2e`)
 - **Storage:** In-memory game state store with JSON file persistence fallback (`src/lib/store/game-store.ts`)
 
 ### 1.2 Directory Layout
@@ -51,20 +51,28 @@ subterfuge2/
 ├── tests/
 │   ├── harness/
 │   │   └── multiplayer-harness.ts          # Multi-context Playwright test utility
-│   └── e2e/
-│       ├── slice1-harness.spec.ts          # Lobby sync & roster readiness
-│       ├── slice2-deployment.spec.ts       # Role & theme assignment matrix
-│       ├── slice3-communication.spec.ts    # Public, Team, and DM comms + burn
-│       ├── slice4-mole-protocol.spec.ts    # Ephemeral mole verification handshake
-│       ├── slice5-theme-declass.spec.ts    # 50% midpoint theme broadcast
-│       ├── slice6-verdict-scoring.spec.ts  # Verdict deliberation, spymaster lock-in & +1/0 scoring
-│       ├── slice7-full-game.spec.ts        # End-to-end operational loop + rematch
-│       ├── slice8-field-manual.spec.ts     # In-game operational field manual
-│       ├── slice9-multi-session-and-direct-join.spec.ts # Tab isolation & in-page onboarding
-│       ├── slice10-recovery-link.spec.ts   # Personal recovery links & reconnect portal
-│       ├── slice11-lobby-management-and-sanitization.spec.ts # Host kick, leave & input bounds
-│       ├── slice12-mobile-audit.spec.ts    # iOS Safari (WebKit) & Android Chrome (Chromium) audit
-│       └── slice13-playtest-improvements.spec.ts # Playtest polish, anti-shoulder-surfing & dev HUD
+│   ├── e2e/                                # Domain-driven Playwright E2E suites
+│   │   ├── lobby.spec.ts                   # Lobby: harness, tab isolation, kick/leave & input bounds
+│   │   ├── infiltration.spec.ts            # Infiltration: deployment, midpoint theme & field manual
+│   │   ├── comms-and-mole.spec.ts          # Comms: channel isolation, burn & mole clearance handshake
+│   │   ├── verdict-deliberation.spec.ts    # Verdict: slate board, two-member consensus & scoring
+│   │   ├── full-mission-loop.spec.ts       # Full end-to-end operational loop + rematch
+│   │   ├── session-recovery.spec.ts        # Recovery links, auto-resume & mid-game recovery portal
+│   │   ├── mobile-responsive.spec.ts       # iOS Safari (WebKit) & Android Chrome (Chromium) audit
+│   │   └── ergonomics.spec.ts              # Playtest polish, anti-shoulder-surfing & dev HUD
+│   └── unit/                               # Vitest unit & contract tests (100 tests)
+│       ├── helpers/test-store.ts           # Isolated in-memory store for deterministic unit tests
+│       ├── data/word-bank.test.ts          # Word bank uniqueness & theme coverage
+│       ├── store/
+│       │   ├── scoring.test.ts             # Mission meter scoring engine
+│       │   ├── role-balancing.test.ts      # Team & mole assignment for all player counts
+│       │   ├── room-lifecycle.test.ts      # Room create/join/start/rematch lifecycle
+│       │   ├── comms-and-burn.test.ts      # Messaging channels & DM burn
+│       │   ├── mole-protocol.test.ts       # Mole clearance challenge & verification
+│       │   ├── sanitization-security.test.ts # Client state redaction security contracts
+│       │   ├── verdict-consensus.test.ts   # Verdict slate, proposal & two-member consensus
+│       │   └── concurrency-locks.test.ts   # Mutex & withLock protection
+│       └── api/route-contracts.test.ts     # HTTP route input validation & error status codes
 └── screenshots/                            # Visual regression artifacts (verified in walkthrough.md)
 ```
 
@@ -157,10 +165,13 @@ Every change to the codebase **must** be validated by running the build and test
 # 1. Verify TypeScript compilation and ESLint
 npm run build
 
-# 2. Run single test suite
-npx playwright test tests/e2e/slice10-recovery-link.spec.ts
+# 2. Run Vitest unit tests (100 tests, ~500ms)
+npm run test
 
-# 3. Run full regression suite (all 13 slices)
+# 3. Run a single E2E domain suite
+npx playwright test tests/e2e/session-recovery.spec.ts
+
+# 4. Run full E2E regression suite (8 domain suites)
 npx playwright test
 ```
 
