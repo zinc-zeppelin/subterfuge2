@@ -206,7 +206,7 @@ Project Subterfuge enforces a strict Cold War intelligence aesthetic:
 
 ## 7. Operational Etiquette for Agents
 
-1. **Do Not Break Passing Tests:** All 13 Playwright test suites must remain 100% green.
+1. **Do Not Break Passing Tests:** All unit tests and Playwright domain test suites (8 suites) must remain 100% green.
 2. **Preserve Comments & Docstrings:** Do not remove existing explanatory comments when modifying files.
 3. **Follow Planning Mode:** For non-trivial architectural changes, formulate an implementation plan, obtain user alignment, execute carefully, and update `walkthrough.md`.
 4. **Keep Commits Clean & Verbose:** Commit with descriptive titles (e.g. `feat(subsystem): brief summary`) and document key decisions.

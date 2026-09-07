@@ -116,7 +116,12 @@ export class GameStore {
       try {
         redisLocked = await this.acquireRedisLock(lockKey, lockVal, 4000);
       } catch (err) {
-        console.warn("[GameStore] Distributed lock fallback to in-process mutex", err);
+        release!();
+        throw err;
+      }
+      if (!redisLocked) {
+        release!();
+        throw new Error("STORE_BUSY: Could not acquire the distributed store lock. Retry the request.");
       }
     }
 
@@ -925,12 +930,26 @@ export class GameStore {
     return (data.moleVerifications[upperCode] || []).filter((v) => v.requesterId === caller.id);
   }
 
-  public async warpTimer(params: { code: string; target: "MIDPOINT" | "VERDICT" | "DEBRIEF" }): Promise<Room> {
+  public async warpTimer(params: { code: string; target: "MIDPOINT" | "VERDICT" | "DEBRIEF"; hostSessionToken?: string }): Promise<Room> {
     return this.withLock(async () => {
+      const isProduction =
+        process.env.NODE_ENV === "production" && process.env.ALLOW_DEV_MUTATORS !== "true";
+
+      if (isProduction) {
+        throw new Error("FORBIDDEN: Development mutators are disabled in production");
+      }
+
       const data = await this.load();
       const upperCode = params.code.toUpperCase();
       const room = data.rooms[upperCode];
       if (!room) throw new Error("Room not found");
+
+      if (params.hostSessionToken) {
+        const host = room.players.find((p) => p.id === room.hostId);
+        if (!host || host.sessionToken !== params.hostSessionToken) {
+          throw new Error("FORBIDDEN: Host authorization required");
+        }
+      }
 
       const now = new Date();
       const durationMs = (room.durationHours || 24) * 60 * 60 * 1000;
@@ -1012,12 +1031,27 @@ export class GameStore {
     });
   }
 
-  public async devFillBots(params: { code: string }): Promise<Room> {
+  public async devFillBots(params: { code: string; hostSessionToken?: string }): Promise<Room> {
     return this.withLock(async () => {
+      const isProduction =
+        process.env.NODE_ENV === "production" && process.env.ALLOW_DEV_MUTATORS !== "true";
+
+      if (isProduction) {
+        throw new Error("FORBIDDEN: Development mutators are disabled in production");
+      }
+
       const data = await this.load();
       const upperCode = params.code.toUpperCase();
       const room = data.rooms[upperCode];
       if (!room) throw new Error("Room not found");
+
+      if (params.hostSessionToken) {
+        const host = room.players.find((p) => p.id === room.hostId);
+        if (!host || host.sessionToken !== params.hostSessionToken) {
+          throw new Error("FORBIDDEN: Host authorization required");
+        }
+      }
+
       if (room.phase !== "LOBBY") {
         throw new Error("CANNOT_FILL_BOTS: Can only fill bots in LOBBY phase");
       }
@@ -1059,12 +1093,26 @@ export class GameStore {
     });
   }
 
-  public async devResetToLobby(params: { code: string }): Promise<Room> {
+  public async devResetToLobby(params: { code: string; hostSessionToken?: string }): Promise<Room> {
     return this.withLock(async () => {
+      const isProduction =
+        process.env.NODE_ENV === "production" && process.env.ALLOW_DEV_MUTATORS !== "true";
+
+      if (isProduction) {
+        throw new Error("FORBIDDEN: Development mutators are disabled in production");
+      }
+
       const data = await this.load();
       const upperCode = params.code.toUpperCase();
       const room = data.rooms[upperCode];
       if (!room) throw new Error("Room not found");
+
+      if (params.hostSessionToken) {
+        const host = room.players.find((p) => p.id === room.hostId);
+        if (!host || host.sessionToken !== params.hostSessionToken) {
+          throw new Error("FORBIDDEN: Host authorization required");
+        }
+      }
 
       room.phase = "LOBBY";
       room.selectedTheme = undefined;

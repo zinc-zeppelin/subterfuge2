@@ -12,6 +12,7 @@ import { POST as challengeHandler } from "@/app/api/rooms/[code]/mole/challenge/
 import { POST as respondChallengeHandler } from "@/app/api/rooms/[code]/mole/respond/route";
 import { GET as getVerificationsHandler } from "@/app/api/rooms/[code]/mole/verifications/route";
 import { POST as warpTimerHandler } from "@/app/api/rooms/[code]/timer/warp/route";
+import { POST as devHandler } from "@/app/api/rooms/[code]/dev/route";
 import { POST as suggestHandler } from "@/app/api/rooms/[code]/verdict/suggest/route";
 import { POST as voteHandler } from "@/app/api/rooms/[code]/verdict/vote/route";
 import { POST as adoptHandler } from "@/app/api/rooms/[code]/verdict/adopt/route";
@@ -325,18 +326,78 @@ describe("API Route HTTP Contracts & Input Validation (Unit)", () => {
   });
 
   describe("Timer Warp API (/timer/warp)", () => {
-    it("warps room phase to VERDICT", async () => {
+    it("rejects unauthenticated requests", async () => {
       const { code } = await setupActiveRoom();
+      const req = new NextRequest(`http://localhost:3000/api/rooms/${code}/timer/warp`, {
+        method: "POST",
+        body: JSON.stringify({ target: "VERDICT" }),
+      });
+      const res = await warpTimerHandler(req, { params: { code } });
+      expect(res.status).toBe(401);
+    });
+
+    it("rejects non-host operatives", async () => {
+      const { code, tokens } = await setupActiveRoom();
+      const nonHostToken = tokens[1];
+      const req = new NextRequest(`http://localhost:3000/api/rooms/${code}/timer/warp`, {
+        method: "POST",
+        headers: { "x-session-token": nonHostToken },
+        body: JSON.stringify({ target: "VERDICT" }),
+      });
+      const res = await warpTimerHandler(req, { params: { code } });
+      expect(res.status).toBe(403);
+    });
+
+    it("warps room phase to VERDICT when authorized by host", async () => {
+      const { code, host } = await setupActiveRoom();
 
       const req = new NextRequest(`http://localhost:3000/api/rooms/${code}/timer/warp`, {
         method: "POST",
-        headers: { "x-subterfuge-dev": "true" },
+        headers: { "x-session-token": host.sessionToken },
         body: JSON.stringify({ target: "VERDICT" }),
       });
       const res = await warpTimerHandler(req, { params: { code } });
       expect(res.status).toBe(200);
       const data = await res.json();
       expect(data.phase).toBe("VERDICT");
+    });
+  });
+
+  describe("Dev API (/dev)", () => {
+    it("rejects unauthenticated dev requests", async () => {
+      const { code } = await setupActiveRoom();
+      const req = new NextRequest(`http://localhost:3000/api/rooms/${code}/dev`, {
+        method: "POST",
+        body: JSON.stringify({ action: "god_mode" }),
+      });
+      const res = await devHandler(req, { params: { code } });
+      expect(res.status).toBe(401);
+    });
+
+    it("rejects non-host operatives from dev controls", async () => {
+      const { code, tokens } = await setupActiveRoom();
+      const nonHostToken = tokens[1];
+      const req = new NextRequest(`http://localhost:3000/api/rooms/${code}/dev`, {
+        method: "POST",
+        headers: { "x-session-token": nonHostToken },
+        body: JSON.stringify({ action: "god_mode" }),
+      });
+      const res = await devHandler(req, { params: { code } });
+      expect(res.status).toBe(403);
+    });
+
+    it("executes god_mode for authenticated host", async () => {
+      const { code, host } = await setupActiveRoom();
+      const req = new NextRequest(`http://localhost:3000/api/rooms/${code}/dev`, {
+        method: "POST",
+        headers: { "x-session-token": host.sessionToken },
+        body: JSON.stringify({ action: "god_mode" }),
+      });
+      const res = await devHandler(req, { params: { code } });
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.success).toBe(true);
+      expect(data.players.length).toBe(6);
     });
   });
 
