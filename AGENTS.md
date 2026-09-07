@@ -9,7 +9,7 @@ This document serves as the primary technical onboarding guide and operational s
 ## 1. Project Overview & Architecture
 
 ### 1.1 Tech Stack
-- **Framework:** Next.js 14 (App Router, React Server Components + Client Components)
+- **Framework:** Next.js 15 (App Router, React Server Components + Client Components)
 - **Language:** TypeScript (strict mode)
 - **Styling:** Tailwind CSS with custom thematic extensions (`classified-amber`, `classified-crimson`, `classified-terminal`, `carbon-*` palette)
 - **Icons:** `lucide-react`

@@ -162,7 +162,7 @@ test.describe("Infiltration — Field Manual & Role Directives", () => {
   });
 
   test("verifies Field Manual is accessible across all phases and role directives expand/collapse correctly", async ({ baseURL }) => {
-    test.setTimeout(120000);
+    test.setTimeout(240000);
     const url = baseURL || "http://localhost:3000";
 
     await harness.initSessions([

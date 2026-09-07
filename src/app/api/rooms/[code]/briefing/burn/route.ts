@@ -3,11 +3,10 @@ import { gameStore } from "@/lib/store/game-store";
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: Promise<{ code: string }> | { code: string } }
+  { params }: { params: Promise<{ code: string }> }
 ) {
   try {
-    const resolvedParams = await Promise.resolve(params);
-    const { code } = resolvedParams;
+    const { code } = await params;
 
     const body = await req.json().catch(() => ({}));
     const sessionToken =

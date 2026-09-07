@@ -3,10 +3,10 @@ import { gameStore } from "@/lib/store/game-store";
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { code: string } }
+  { params }: { params: Promise<{ code: string }> }
 ) {
   try {
-    const { code } = params;
+    const { code } = await params;
     const sessionToken =
       req.headers.get("x-session-token") ||
       req.cookies.get("subterfuge_session")?.value;
