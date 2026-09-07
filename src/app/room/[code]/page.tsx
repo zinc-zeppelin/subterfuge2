@@ -3828,18 +3828,18 @@ export default function RoomPage() {
                     <span className="text-nano text-classified-amber font-bold uppercase">LOYAL OPERATIVE</span>
                   </div>
                   <p>
-                    You are an active <strong className="text-white">Field Operative</strong> for the{" "}
-                    <strong className="text-classified-amber">{self.apparentTeam} FACTION</strong>. Your mission is to
-                    protect your code word from enemy extraction while collaborating on Team radio to discover enemy words.
+                    You are a loyal <strong className="text-white">Field Agent</strong> for the{" "}
+                    <strong className="text-classified-amber">{self.apparentTeam} FACTION</strong>. An enemy sleeper mole is hidden in your squad.
                   </p>
                   <ul className="list-disc pl-5 space-y-1.5 text-gray-400 pt-1">
                     <li>
-                      <strong className="text-white">Deliberation Wire:</strong> Propose and confirm candidate code words on the team
-                      deliberation board to achieve two-member consensus.
+                      <strong className="text-white">Expose the Mole:</strong> Coordinate in real life, on Team Radio, and via Direct Lines to identify the traitor in your ranks.
                     </li>
                     <li>
-                      <strong className="text-white">Vigilance:</strong> An enemy sleeper is embedded in your ranks.
-                      Watch for inconsistent stories, deflections, or false leads.
+                      <strong className="text-white">Protect Authentic Words:</strong> Shield your genuine words from suspects—or feed them decoys—so they cannot leak your secrets.
+                    </li>
+                    <li>
+                      <strong className="text-white">Unite with True Allies:</strong> Privately exchange authentic words with trusted teammates, including the opposing squad&apos;s mole who is secretly loyal to you.
                     </li>
                   </ul>
                 </>
