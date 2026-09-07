@@ -11,6 +11,7 @@ import {
   WordSuggestion,
   TeamVerdict,
   ProposedVerdict,
+  TeamDraftSlate,
   TeamColor,
 } from "../types/game";
 import { getRandomTheme, drawWordsForTheme } from "../data/word-bank";
@@ -31,6 +32,22 @@ class GameStore {
   private dataDir: string;
   private filePath: string;
   private redis: Redis | null = null;
+  private mutex: Promise<void> = Promise.resolve();
+
+  public async withLock<T>(fn: () => Promise<T>): Promise<T> {
+    let release: () => void;
+    const nextLock = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const currentLock = this.mutex;
+    this.mutex = nextLock;
+    await currentLock;
+    try {
+      return await fn();
+    } finally {
+      release!();
+    }
+  }
 
   constructor() {
     this.dataDir = path.join(process.cwd(), ".data");
@@ -343,6 +360,7 @@ class GameStore {
       const player = room.players[i];
       const word = words[i];
       player.assignedWord = word;
+      player.hasBurnedBriefing = false;
       room.codebook[player.id] = word;
     }
 
@@ -353,6 +371,11 @@ class GameStore {
     room.midpointTime = new Date(now.getTime() + durationMs / 2).toISOString();
     room.endTime = new Date(now.getTime() + durationMs).toISOString();
     room.phase = "INFILTRATION";
+    room.suggestions = { RED: [], BLUE: [] };
+    room.draftSlates = {
+      RED: { words: [], updatedAt: now.toISOString() },
+      BLUE: { words: [], updatedAt: now.toISOString() },
+    };
 
     await this.save(data);
     return room;
@@ -431,6 +454,7 @@ class GameStore {
       apparentTeam: p.apparentTeam,
       isReady: p.isReady,
       isHost: p.isHost,
+      hasBurnedBriefing: p.hasBurnedBriefing ?? false,
       actualTeam: isDebrief ? p.actualTeam : undefined,
       role: isDebrief ? p.role : undefined,
       assignedWord: isDebrief ? p.assignedWord : undefined,
@@ -460,6 +484,7 @@ class GameStore {
         actualTeam: self.actualTeam,
         role: self.role,
         assignedWord: self.assignedWord,
+        hasBurnedBriefing: self.hasBurnedBriefing ?? false,
         isReady: self.isReady,
         isHost: self.isHost,
       },
@@ -488,6 +513,10 @@ class GameStore {
         self.apparentTeam && room.suggestions?.[self.apparentTeam]
           ? [...room.suggestions[self.apparentTeam]].sort((a, b) => b.votes.length - a.votes.length)
           : [],
+      draftSlate:
+        self.apparentTeam && room.draftSlates?.[self.apparentTeam]
+          ? room.draftSlates[self.apparentTeam]
+          : { words: [], updatedAt: new Date().toISOString() },
       proposedVerdict:
         self.apparentTeam && room.proposedVerdicts?.[self.apparentTeam]
           ? room.proposedVerdicts[self.apparentTeam]
@@ -789,88 +818,90 @@ class GameStore {
   }
 
   public async warpTimer(params: { code: string; target: "MIDPOINT" | "VERDICT" | "DEBRIEF" }): Promise<Room> {
-    const data = await this.load();
-    const upperCode = params.code.toUpperCase();
-    const room = data.rooms[upperCode];
-    if (!room) throw new Error("Room not found");
+    return this.withLock(async () => {
+      const data = await this.load();
+      const upperCode = params.code.toUpperCase();
+      const room = data.rooms[upperCode];
+      if (!room) throw new Error("Room not found");
 
-    const now = new Date();
-    const durationMs = (room.durationHours || 24) * 60 * 60 * 1000;
+      const now = new Date();
+      const durationMs = (room.durationHours || 24) * 60 * 60 * 1000;
 
-    if (params.target === "MIDPOINT") {
-      room.startTime = new Date(now.getTime() - durationMs / 2 - 2000).toISOString();
-      room.midpointTime = new Date(now.getTime() - 2000).toISOString();
-      room.endTime = new Date(now.getTime() + durationMs / 2 - 2000).toISOString();
-    } else if (params.target === "VERDICT") {
-      room.startTime = new Date(now.getTime() - durationMs - 2000).toISOString();
-      room.midpointTime = new Date(now.getTime() - durationMs / 2).toISOString();
-      room.endTime = new Date(now.getTime() - 2000).toISOString();
-      room.phase = "VERDICT";
-      const verdictMs = (room.verdictDurationMinutes || 60) * 60 * 1000;
-      room.verdictEndTime = new Date(now.getTime() + verdictMs).toISOString();
-    } else if (params.target === "DEBRIEF") {
-      if (room.phase === "LOBBY") {
-        throw new Error("CANNOT_WARP: Cannot warp to DEBRIEF before starting operation");
+      if (params.target === "MIDPOINT") {
+        room.startTime = new Date(now.getTime() - durationMs / 2 - 2000).toISOString();
+        room.midpointTime = new Date(now.getTime() - 2000).toISOString();
+        room.endTime = new Date(now.getTime() + durationMs / 2 - 2000).toISOString();
+      } else if (params.target === "VERDICT") {
+        room.startTime = new Date(now.getTime() - durationMs - 2000).toISOString();
+        room.midpointTime = new Date(now.getTime() - durationMs / 2).toISOString();
+        room.endTime = new Date(now.getTime() - 2000).toISOString();
+        room.phase = "VERDICT";
+        const verdictMs = (room.verdictDurationMinutes || 60) * 60 * 1000;
+        room.verdictEndTime = new Date(now.getTime() + verdictMs).toISOString();
+      } else if (params.target === "DEBRIEF") {
+        if (room.phase === "LOBBY") {
+          throw new Error("CANNOT_WARP: Cannot warp to DEBRIEF before starting operation");
+        }
+        room.startTime = new Date(now.getTime() - durationMs - 4000).toISOString();
+        room.midpointTime = new Date(now.getTime() - durationMs / 2).toISOString();
+        room.endTime = new Date(now.getTime() - 4000).toISOString();
+        room.verdictEndTime = new Date(now.getTime() - 2000).toISOString();
+        room.phase = "DEBRIEF";
+
+        if (!room.verdicts) {
+          room.verdicts = { RED: undefined as any, BLUE: undefined as any };
+        }
+
+        const allAssignedWords = room.players.map((p) => p.assignedWord).filter(Boolean) as string[];
+        const redLead = room.players.find((p) => p.apparentTeam === "RED");
+        const blueLead = room.players.find((p) => p.apparentTeam === "BLUE");
+        const blueMole = room.players.find((p) => p.actualTeam === "BLUE" && p.role === "MOLE");
+        const redMole = room.players.find((p) => p.actualTeam === "RED" && p.role === "MOLE");
+
+        if (!room.verdicts["RED"] && redLead) {
+          const proposed = room.proposedVerdicts?.["RED"];
+          room.verdicts["RED"] = {
+            team: "RED",
+            submittedBy: proposed?.proposedBy || redLead.id,
+            submittedByName: proposed?.proposedByName || redLead.displayName,
+            guesses: proposed?.guesses || allAssignedWords.slice(0, Math.min(room.players.length, allAssignedWords.length)),
+            moleIndictmentId: proposed?.moleIndictmentId || redMole?.id,
+            moleIndictmentName: proposed?.moleIndictmentName || redMole?.displayName,
+            score: allAssignedWords.length,
+            correctGuesses: [...allAssignedWords],
+            submittedAt: new Date().toISOString(),
+            confirmedBy: proposed?.confirmedBy || [redLead.id],
+            confirmedByNames: proposed?.confirmedByNames || [redLead.displayName],
+          };
+        }
+
+        if (!room.verdicts["BLUE"] && blueLead) {
+          const proposed = room.proposedVerdicts?.["BLUE"];
+          room.verdicts["BLUE"] = {
+            team: "BLUE",
+            submittedBy: proposed?.proposedBy || blueLead.id,
+            submittedByName: proposed?.proposedByName || blueLead.displayName,
+            guesses: proposed?.guesses || allAssignedWords.slice(0, Math.min(room.players.length, allAssignedWords.length)),
+            moleIndictmentId: proposed?.moleIndictmentId || blueMole?.id,
+            moleIndictmentName: proposed?.moleIndictmentName || blueMole?.displayName,
+            score: allAssignedWords.length,
+            correctGuesses: [...allAssignedWords],
+            submittedAt: new Date().toISOString(),
+            confirmedBy: proposed?.confirmedBy || [blueLead.id],
+            confirmedByNames: proposed?.confirmedByNames || [blueLead.displayName],
+          };
+        }
+
+        const redScore = room.verdicts["RED"]?.score || 0;
+        const blueScore = room.verdicts["BLUE"]?.score || 0;
+        if (redScore > blueScore) room.winner = "RED";
+        else if (blueScore > redScore) room.winner = "BLUE";
+        else room.winner = "DRAW";
       }
-      room.startTime = new Date(now.getTime() - durationMs - 4000).toISOString();
-      room.midpointTime = new Date(now.getTime() - durationMs / 2).toISOString();
-      room.endTime = new Date(now.getTime() - 4000).toISOString();
-      room.verdictEndTime = new Date(now.getTime() - 2000).toISOString();
-      room.phase = "DEBRIEF";
 
-      if (!room.verdicts) {
-        room.verdicts = { RED: undefined as any, BLUE: undefined as any };
-      }
-
-      const allAssignedWords = room.players.map((p) => p.assignedWord).filter(Boolean) as string[];
-      const redLead = room.players.find((p) => p.apparentTeam === "RED");
-      const blueLead = room.players.find((p) => p.apparentTeam === "BLUE");
-      const blueMole = room.players.find((p) => p.actualTeam === "BLUE" && p.role === "MOLE");
-      const redMole = room.players.find((p) => p.actualTeam === "RED" && p.role === "MOLE");
-
-      if (!room.verdicts["RED"] && redLead) {
-        const proposed = room.proposedVerdicts?.["RED"];
-        room.verdicts["RED"] = {
-          team: "RED",
-          submittedBy: proposed?.proposedBy || redLead.id,
-          submittedByName: proposed?.proposedByName || redLead.displayName,
-          guesses: proposed?.guesses || allAssignedWords.slice(0, Math.min(room.players.length, allAssignedWords.length)),
-          moleIndictmentId: proposed?.moleIndictmentId || redMole?.id,
-          moleIndictmentName: proposed?.moleIndictmentName || redMole?.displayName,
-          score: allAssignedWords.length,
-          correctGuesses: [...allAssignedWords],
-          submittedAt: new Date().toISOString(),
-          confirmedBy: proposed?.confirmedBy || [redLead.id],
-          confirmedByNames: proposed?.confirmedByNames || [redLead.displayName],
-        };
-      }
-
-      if (!room.verdicts["BLUE"] && blueLead) {
-        const proposed = room.proposedVerdicts?.["BLUE"];
-        room.verdicts["BLUE"] = {
-          team: "BLUE",
-          submittedBy: proposed?.proposedBy || blueLead.id,
-          submittedByName: proposed?.proposedByName || blueLead.displayName,
-          guesses: proposed?.guesses || allAssignedWords.slice(0, Math.min(room.players.length, allAssignedWords.length)),
-          moleIndictmentId: proposed?.moleIndictmentId || blueMole?.id,
-          moleIndictmentName: proposed?.moleIndictmentName || blueMole?.displayName,
-          score: allAssignedWords.length,
-          correctGuesses: [...allAssignedWords],
-          submittedAt: new Date().toISOString(),
-          confirmedBy: proposed?.confirmedBy || [blueLead.id],
-          confirmedByNames: proposed?.confirmedByNames || [blueLead.displayName],
-        };
-      }
-
-      const redScore = room.verdicts["RED"]?.score || 0;
-      const blueScore = room.verdicts["BLUE"]?.score || 0;
-      if (redScore > blueScore) room.winner = "RED";
-      else if (blueScore > redScore) room.winner = "BLUE";
-      else room.winner = "DRAW";
-    }
-
-    await this.save(data);
-    return room;
+      await this.save(data);
+      return room;
+    });
   }
 
   public async devFillBots(params: { code: string }): Promise<Room> {
@@ -932,6 +963,8 @@ class GameStore {
     room.endTime = undefined;
     room.verdictEndTime = undefined;
     room.verdicts = undefined;
+    room.proposedVerdicts = undefined;
+    room.draftSlates = undefined;
     room.suggestions = undefined;
     room.winner = undefined;
 
@@ -941,6 +974,7 @@ class GameStore {
       player.actualTeam = undefined;
       player.role = undefined;
       player.assignedWord = undefined;
+      player.hasBurnedBriefing = false;
     }
 
     data.messages[upperCode] = [];
@@ -1035,6 +1069,124 @@ class GameStore {
     return suggestion;
   }
 
+  public async adoptSlateWord(params: {
+    code: string;
+    sessionToken: string;
+    word: string;
+  }): Promise<TeamDraftSlate> {
+    const data = await this.load();
+    const upperCode = params.code.toUpperCase();
+    const room = data.rooms[upperCode];
+    if (!room) throw new Error("Room not found");
+    if (room.phase !== "VERDICT") {
+      throw new Error("INVALID_PHASE: Draft slate is only active during VERDICT phase");
+    }
+
+    const caller = room.players.find((p) => p.sessionToken === params.sessionToken);
+    if (!caller || !caller.apparentTeam) throw new Error("UNAUTHORIZED: Invalid operative session");
+
+    const cleanWord = params.word.trim().toUpperCase().replace(/[^A-Z0-9-]/g, "");
+    if (!cleanWord) throw new Error("INVALID_WORD: Word must be alphanumeric");
+
+    if (!room.draftSlates) {
+      room.draftSlates = {
+        RED: { words: [], updatedAt: new Date().toISOString() },
+        BLUE: { words: [], updatedAt: new Date().toISOString() },
+      };
+    }
+    if (!room.draftSlates[caller.apparentTeam]) {
+      room.draftSlates[caller.apparentTeam] = { words: [], updatedAt: new Date().toISOString() };
+    }
+
+    const slate = room.draftSlates[caller.apparentTeam];
+    if (!slate.words.includes(cleanWord)) {
+      if (slate.words.length >= room.players.length) {
+        throw new Error(`SLATE_FULL: Cannot adopt more than ${room.players.length} words`);
+      }
+      slate.words.push(cleanWord);
+      slate.updatedAt = new Date().toISOString();
+      slate.updatedByName = caller.displayName;
+    }
+
+    await this.save(data);
+    return slate;
+  }
+
+  public async removeSlateWord(params: {
+    code: string;
+    sessionToken: string;
+    word: string;
+  }): Promise<TeamDraftSlate> {
+    const data = await this.load();
+    const upperCode = params.code.toUpperCase();
+    const room = data.rooms[upperCode];
+    if (!room) throw new Error("Room not found");
+    if (room.phase !== "VERDICT") {
+      throw new Error("INVALID_PHASE: Draft slate is only active during VERDICT phase");
+    }
+
+    const caller = room.players.find((p) => p.sessionToken === params.sessionToken);
+    if (!caller || !caller.apparentTeam) throw new Error("UNAUTHORIZED: Invalid operative session");
+
+    const cleanWord = params.word.trim().toUpperCase().replace(/[^A-Z0-9-]/g, "");
+
+    if (!room.draftSlates || !room.draftSlates[caller.apparentTeam]) {
+      return { words: [], updatedAt: new Date().toISOString() };
+    }
+
+    const slate = room.draftSlates[caller.apparentTeam];
+    slate.words = slate.words.filter((w) => w.toUpperCase() !== cleanWord);
+    slate.updatedAt = new Date().toISOString();
+    slate.updatedByName = caller.displayName;
+
+    await this.save(data);
+    return slate;
+  }
+
+  public async setSlateMoleIndictment(params: {
+    code: string;
+    sessionToken: string;
+    moleIndictmentId?: string;
+  }): Promise<TeamDraftSlate> {
+    const data = await this.load();
+    const upperCode = params.code.toUpperCase();
+    const room = data.rooms[upperCode];
+    if (!room) throw new Error("Room not found");
+    if (room.phase !== "VERDICT") {
+      throw new Error("INVALID_PHASE: Draft slate is only active during VERDICT phase");
+    }
+
+    const caller = room.players.find((p) => p.sessionToken === params.sessionToken);
+    if (!caller || !caller.apparentTeam) throw new Error("UNAUTHORIZED: Invalid operative session");
+
+    if (!room.draftSlates) {
+      room.draftSlates = {
+        RED: { words: [], updatedAt: new Date().toISOString() },
+        BLUE: { words: [], updatedAt: new Date().toISOString() },
+      };
+    }
+    if (!room.draftSlates[caller.apparentTeam]) {
+      room.draftSlates[caller.apparentTeam] = { words: [], updatedAt: new Date().toISOString() };
+    }
+
+    const slate = room.draftSlates[caller.apparentTeam];
+    slate.moleIndictmentId = params.moleIndictmentId || undefined;
+    if (params.moleIndictmentId) {
+      const target = room.players.find((p) => p.id === params.moleIndictmentId);
+      if (target && target.apparentTeam !== caller.apparentTeam) {
+        throw new Error("INVALID_INDICTMENT: Can only indict suspected moles on your own team");
+      }
+      slate.moleIndictmentName = target?.displayName;
+    } else {
+      slate.moleIndictmentName = undefined;
+    }
+    slate.updatedAt = new Date().toISOString();
+    slate.updatedByName = caller.displayName;
+
+    await this.save(data);
+    return slate;
+  }
+
   public async submitTeamVerdict(params: {
     code: string;
     sessionToken: string;
@@ -1081,25 +1233,20 @@ class GameStore {
       };
     }
 
-    const existing = room.proposedVerdicts[team];
-    let isConfirming = false;
+    const effectiveGuesses =
+      params.guesses && params.guesses.length > 0
+        ? params.guesses
+        : room.draftSlates?.[team]?.words || [];
+    const effectiveMoleId =
+      params.moleIndictmentId !== undefined
+        ? params.moleIndictmentId
+        : room.draftSlates?.[team]?.moleIndictmentId;
 
-    if (existing) {
-      if (params.confirmOnly) {
-        isConfirming = true;
-      } else if (params.guesses && params.guesses.length > 0) {
-        const existingSet = new Set(existing.guesses.map((w) => w.toUpperCase()));
-        const newClean = params.guesses
-          .map((g) => g.trim().toUpperCase().replace(/[^A-Z0-9-]/g, ""))
-          .filter(Boolean);
-        const sameGuesses =
-          newClean.length === existing.guesses.length &&
-          newClean.every((w) => existingSet.has(w));
-        const sameMole = (params.moleIndictmentId || undefined) === (existing.moleIndictmentId || undefined);
-        if (sameGuesses && sameMole) {
-          isConfirming = true;
-        }
-      }
+    const existing = room.proposedVerdicts[team];
+    const isConfirming = Boolean(params.confirmOnly && existing);
+
+    if (params.confirmOnly && !existing) {
+      throw new Error("NO_PROPOSAL_TO_CONFIRM: No pending verdict proposal to confirm");
     }
 
     if (isConfirming && existing) {
@@ -1109,6 +1256,10 @@ class GameStore {
       }
 
       if (existing.confirmedBy.length >= 2) {
+        if (existing.guesses.length !== n) {
+          throw new Error(`SLATE_INCOMPLETE: Exactly ${n} code words required for official lock-in (currently ${existing.guesses.length})`);
+        }
+
         // Two teammates agreed: Lock the official team verdict!
         const scoring = this.calculateTeamVerdictScore(
           room,
@@ -1188,11 +1339,15 @@ class GameStore {
 
     // New or updated proposal
     const cleanedGuesses: string[] = [];
-    for (const g of params.guesses || []) {
+    for (const g of effectiveGuesses) {
       const clean = g.trim().toUpperCase().replace(/[^A-Z0-9-]/g, "");
       if (clean && !cleanedGuesses.includes(clean)) {
         cleanedGuesses.push(clean);
       }
+    }
+
+    if (cleanedGuesses.length < n) {
+      throw new Error(`SLATE_INCOMPLETE: Cannot propose slate until all ${n} code words are adopted (currently ${cleanedGuesses.length})`);
     }
 
     if (cleanedGuesses.length > n) {
@@ -1200,8 +1355,11 @@ class GameStore {
     }
 
     let moleIndictmentName: string | undefined;
-    if (params.moleIndictmentId) {
-      const indicted = room.players.find((p) => p.id === params.moleIndictmentId);
+    if (effectiveMoleId) {
+      const indicted = room.players.find((p) => p.id === effectiveMoleId);
+      if (indicted && indicted.apparentTeam !== team) {
+        throw new Error("INVALID_INDICTMENT: Can only indict suspected moles on your own team");
+      }
       if (indicted) {
         moleIndictmentName = indicted.displayName;
       }
@@ -1212,7 +1370,7 @@ class GameStore {
       proposedBy: caller.id,
       proposedByName: caller.displayName,
       guesses: cleanedGuesses,
-      moleIndictmentId: params.moleIndictmentId,
+      moleIndictmentId: effectiveMoleId,
       moleIndictmentName,
       proposedAt: new Date().toISOString(),
       confirmedBy: [caller.id],
@@ -1315,6 +1473,8 @@ class GameStore {
     room.endTime = undefined;
     room.verdictEndTime = undefined;
     room.verdicts = undefined;
+    room.proposedVerdicts = undefined;
+    room.draftSlates = undefined;
     room.suggestions = undefined;
     room.winner = undefined;
 
@@ -1324,6 +1484,7 @@ class GameStore {
       player.actualTeam = undefined;
       player.role = undefined;
       player.assignedWord = undefined;
+      player.hasBurnedBriefing = false;
     }
 
     data.messages[upperCode] = [];
@@ -1394,6 +1555,25 @@ class GameStore {
     room.players.splice(targetIndex, 1);
     await this.save(data);
     return { success: true };
+  }
+
+  public async burnBriefing(params: {
+    code: string;
+    sessionToken: string;
+  }): Promise<{ success: boolean; player: Player }> {
+    return this.withLock(async () => {
+      const data = await this.load();
+      const upperCode = params.code.toUpperCase();
+      const room = data.rooms[upperCode];
+      if (!room) throw new Error("Room not found");
+
+      const player = room.players.find((p) => p.sessionToken === params.sessionToken);
+      if (!player) throw new Error("Unauthorized operative session");
+
+      player.hasBurnedBriefing = true;
+      await this.save(data);
+      return { success: true, player };
+    });
   }
 
   public async reset(): Promise<void> {

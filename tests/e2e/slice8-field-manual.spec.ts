@@ -132,7 +132,12 @@ test.describe("Slice 8: Operational Field Manual with Role-Specific Directives",
 
     // 4. Test Availability in VERDICT Phase
     await harness.warpTime("VERDICT");
-    await expect(hostPage.locator("#verdict-board")).toBeVisible({ timeout: 15000 });
+    for (const op of harness.sessions) {
+      await expect(op.page.locator("#room-phase-badge")).toHaveText("VERDICT", {
+        timeout: 15000,
+      });
+      await expect(op.page.locator("#verdict-board")).toBeVisible({ timeout: 15000 });
+    }
 
     // Field Manual must be accessible in Verdict phase
     await expect(hostPage.locator("#field-manual-btn")).toBeVisible();
@@ -143,12 +148,16 @@ test.describe("Slice 8: Operational Field Manual with Role-Specific Directives",
 
     // 5. Test Availability in DEBRIEF Phase
     // Submit verdicts with two-member consensus from both teams to trigger Debrief
-    await harness.operativeAddVerdictGuess(blueOps[0].idx, "TESTWORD1");
+    for (let i = 1; i <= 6; i++) {
+      await harness.operativeAddVerdictGuess(blueOps[0].idx, `TESTBLUE${i}`);
+    }
     await harness.operativeProposeVerdict(blueOps[0].idx);
     await harness.teammateConfirmVerdict(blueOps[1].idx);
     await harness.expectVerdictLocked(blueOps[0].idx);
 
-    await harness.operativeAddVerdictGuess(redOps[0].idx, "TESTWORD2");
+    for (let i = 1; i <= 6; i++) {
+      await harness.operativeAddVerdictGuess(redOps[0].idx, `TESTRED${i}`);
+    }
     await harness.operativeProposeVerdict(redOps[0].idx);
     await harness.teammateConfirmVerdict(redOps[1].idx);
     await harness.expectDebriefViewOnAll();

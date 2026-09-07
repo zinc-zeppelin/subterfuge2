@@ -21,30 +21,21 @@ export async function POST(
     }
 
     const body = await req.json();
-    const { word } = body;
+    const { moleIndictmentId } = body;
 
-    if (!word) {
-      return NextResponse.json(
-        { error: "INVALID_REQUEST: Candidate word required" },
-        { status: 400 }
-      );
-    }
-
-    const suggestion = await gameStore.addWordSuggestion({
+    const draftSlate = await gameStore.setSlateMoleIndictment({
       code,
       sessionToken,
-      word,
+      moleIndictmentId,
     });
 
-    const state = await gameStore.getClientGameState(code, sessionToken);
-
-    return NextResponse.json({
-      success: true,
-      suggestion,
-      suggestions: state.teamSuggestions,
-    });
+    return NextResponse.json({ success: true, draftSlate });
   } catch (error: any) {
-    const status = error.message.includes("UNAUTHORIZED") ? 403 : 400;
+    const status = error.message.includes("UNAUTHORIZED")
+      ? 403
+      : error.message.includes("not found")
+      ? 404
+      : 400;
     return NextResponse.json({ error: error.message }, { status });
   }
 }

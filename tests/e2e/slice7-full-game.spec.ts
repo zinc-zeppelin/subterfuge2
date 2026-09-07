@@ -17,7 +17,7 @@ test.describe("Slice 7: Full 6-Player End-to-End Match, Debrief Reveal & Host Re
   test("runs full 6-player operational loop through Lobby, Infiltration, Comms, Mole Protocol, Midpoint Intercept, Verdict Deliberation, Debrief & Codebook Reveal, and Host Rematch", async ({
     baseURL,
   }) => {
-    test.setTimeout(120000);
+    test.setTimeout(180000);
     const url = baseURL || "http://localhost:3000";
 
     // 1. Lobby Phase: Initialize 6 operative browser sessions

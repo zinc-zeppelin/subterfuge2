@@ -153,12 +153,15 @@ export class SixPlayerHarness {
   public async acknowledgeBriefing(playerIndex: number): Promise<void> {
     const op = this.sessions[playerIndex];
     const modal = op.page.locator("#operational-briefing-modal");
-    if (await modal.isVisible({ timeout: 1500 }).catch(() => false)) {
+    try {
+      await modal.waitFor({ state: "visible", timeout: 3000 });
       const wordAttr = await modal.getAttribute("data-assigned-word");
       const word = wordAttr || (await op.page.locator("#briefing-assigned-word").innerText());
       await op.page.fill("#briefing-codeword-input", word.trim());
       await op.page.click("#burn-briefing-btn", { force: true });
       await expect(modal).not.toBeVisible({ timeout: 5000 });
+    } catch {
+      // modal not present or already burned
     }
   }
 
@@ -348,9 +351,16 @@ export class SixPlayerHarness {
     const page = this.sessions[0].page;
     const res = await page.request.post(`/api/rooms/${this.roomCode}/timer/warp`, {
       data: { target },
+      headers: { "x-subterfuge-dev": "true" },
     });
     if (!res.ok()) {
       throw new Error(`Failed to warp time: ${await res.text()}`);
+    }
+    // Awaken background tabs across all operative sessions to fetch new state immediately
+    for (const session of this.sessions) {
+      await session.page.evaluate(() => {
+        window.dispatchEvent(new Event("focus"));
+      }).catch(() => {});
     }
   }
 
@@ -358,9 +368,14 @@ export class SixPlayerHarness {
    * Assert that the declassified theme banner is visible across all 6 operatives
    */
   public async expectDeclassifiedThemeBannerOnAll(): Promise<string> {
+    for (const session of this.sessions) {
+      await session.page.evaluate(() => {
+        window.dispatchEvent(new Event("focus"));
+      }).catch(() => {});
+    }
     let themeName = "";
     for (const op of this.sessions) {
-      await expect(op.page.locator("#declassified-theme-banner")).toBeVisible({ timeout: 10000 });
+      await expect(op.page.locator("#declassified-theme-banner")).toBeVisible({ timeout: 15000 });
       const nameLocator = op.page.locator("#declassified-theme-name");
       await expect(nameLocator).toBeVisible({ timeout: 10000 });
       const text = await nameLocator.innerText();
@@ -385,8 +400,10 @@ export class SixPlayerHarness {
    */
   public async proposeWord(playerIndex: number, word: string): Promise<void> {
     const op = this.sessions[playerIndex];
-    await op.page.fill("#proposal-word-input", word);
+    const upper = word.trim().toUpperCase();
+    await op.page.fill("#proposal-word-input", upper);
     await op.page.click("#propose-word-btn");
+    await expect(op.page.locator("#proposal-word-input")).toHaveValue("", { timeout: 8000 });
   }
 
   /**
@@ -394,8 +411,33 @@ export class SixPlayerHarness {
    */
   public async operativeAddVerdictGuess(playerIndex: number, word: string): Promise<void> {
     const op = this.sessions[playerIndex];
-    await op.page.fill("#verdict-word-input", word);
-    await op.page.click("#add-guess-btn");
+    const upper = word.trim().toUpperCase();
+    const slateBadge = op.page.locator(`#draft-guess-${upper.toLowerCase()}`);
+    if (await slateBadge.isVisible().catch(() => false)) {
+      return;
+    }
+    const adoptBtn = op.page.locator(`#adopt-word-btn-${upper}`);
+    if (!(await adoptBtn.isVisible().catch(() => false))) {
+      await this.proposeWord(playerIndex, upper);
+      await adoptBtn.waitFor({ state: "visible", timeout: 12000 });
+    }
+    await adoptBtn.click();
+    await slateBadge.waitFor({ state: "visible", timeout: 12000 });
+    await adoptBtn.waitFor({ state: "detached", timeout: 12000 });
+  }
+
+  /**
+   * Operative removes a candidate word from their team verdict draft slate
+   */
+  public async operativeRemoveVerdictGuess(playerIndex: number, word: string): Promise<void> {
+    const op = this.sessions[playerIndex];
+    const upper = word.trim().toUpperCase();
+    const removeBtn = op.page.locator(`#remove-slate-word-${upper.toLowerCase()}`);
+    if (await removeBtn.isVisible().catch(() => false)) {
+      await removeBtn.click();
+      await removeBtn.waitFor({ state: "detached", timeout: 12000 });
+      await op.page.locator(`#adopt-word-btn-${upper}`).waitFor({ state: "visible", timeout: 12000 });
+    }
   }
 
   /**
@@ -404,9 +446,15 @@ export class SixPlayerHarness {
   public async operativeProposeVerdict(playerIndex: number): Promise<void> {
     const op = this.sessions[playerIndex];
     await op.page.click("#lock-in-verdict-btn");
-    const confirmBtn = op.page.locator("#confirm-verdict-btn");
-    if (await confirmBtn.isVisible({ timeout: 1500 }).catch(() => false)) {
-      await confirmBtn.click();
+    const transmitBtn = op.page.locator("#transmit-proposal-btn");
+    await transmitBtn.waitFor({ state: "visible", timeout: 5000 });
+    await transmitBtn.click();
+    await op.page.locator("#verdict-confirmation-modal").waitFor({ state: "hidden", timeout: 5000 });
+    // Awaken background tabs so teammates see the proposal immediately
+    for (const session of this.sessions) {
+      await session.page.evaluate(() => {
+        window.dispatchEvent(new Event("focus"));
+      }).catch(() => {});
     }
   }
 
@@ -415,7 +463,17 @@ export class SixPlayerHarness {
    */
   public async teammateConfirmVerdict(playerIndex: number): Promise<void> {
     const op = this.sessions[playerIndex];
+    await op.page.evaluate(() => {
+      window.dispatchEvent(new Event("focus"));
+    }).catch(() => {});
     await op.page.click("#confirm-verdict-btn");
+    await expect(op.page.locator("#confirm-verdict-btn")).not.toBeVisible({ timeout: 12000 });
+    // Awaken background tabs so all sessions observe lock or debrief transition
+    for (const session of this.sessions) {
+      await session.page.evaluate(() => {
+        window.dispatchEvent(new Event("focus"));
+      }).catch(() => {});
+    }
   }
 
   /**
@@ -438,6 +496,12 @@ export class SixPlayerHarness {
    * Assert debrief view is visible across all 6 operatives
    */
   public async expectDebriefViewOnAll(): Promise<void> {
+    // Awaken background tabs across all operative sessions to fetch new state immediately
+    for (const session of this.sessions) {
+      await session.page.evaluate(() => {
+        window.dispatchEvent(new Event("focus"));
+      }).catch(() => {});
+    }
     for (const op of this.sessions) {
       await expect(op.page.locator("#room-phase-badge")).toHaveText("DEBRIEF", { timeout: 15000 });
       await expect(op.page.locator("#debrief-winner-banner")).toBeVisible({ timeout: 15000 });

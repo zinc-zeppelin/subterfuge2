@@ -33,6 +33,7 @@ export interface Player {
   actualTeam?: TeamColor;
   role?: PlayerRole;
   assignedWord?: string;
+  hasBurnedBriefing?: boolean;
   isReady: boolean;
   isHost: boolean;
   createdAt: string;
@@ -48,6 +49,7 @@ export interface SanitizedPlayer {
   apparentTeam?: TeamColor;
   isReady: boolean;
   isHost: boolean;
+  hasBurnedBriefing?: boolean;
   // Revealed only in DEBRIEF phase
   actualTeam?: TeamColor;
   role?: PlayerRole;
@@ -111,6 +113,14 @@ export interface TeamVerdict {
   confirmedByNames?: string[];
 }
 
+export interface TeamDraftSlate {
+  words: string[];
+  moleIndictmentId?: string;
+  moleIndictmentName?: string;
+  updatedAt: string;
+  updatedByName?: string;
+}
+
 export interface Room {
   id: string;
   code: string;
@@ -127,6 +137,7 @@ export interface Room {
   players: Player[];
   codebook?: Record<string, string>; // playerId -> assignedWord
   suggestions?: Record<TeamColor, WordSuggestion[]>;
+  draftSlates?: Record<TeamColor, TeamDraftSlate>;
   proposedVerdicts?: Partial<Record<TeamColor, ProposedVerdict>>;
   verdicts?: Partial<Record<TeamColor, TeamVerdict>>;
   winner?: TeamColor | "DRAW";
@@ -153,6 +164,7 @@ export interface ClientGameState {
     actualTeam?: TeamColor;
     role?: PlayerRole;
     assignedWord?: string;
+    hasBurnedBriefing?: boolean;
     isReady: boolean;
     isHost: boolean;
   };
@@ -166,6 +178,7 @@ export interface ClientGameState {
   }[];
   challengeStatuses?: Record<string, "PENDING" | "ACCEPTED" | "DENIED" | "DECLINED">; // targetId -> status
   teamSuggestions?: WordSuggestion[];
+  draftSlate?: TeamDraftSlate;
   proposedVerdict?: ProposedVerdict;
   teamVerdict?: TeamVerdict;
   allVerdicts?: Partial<Record<TeamColor, TeamVerdict>>; // only in DEBRIEF
