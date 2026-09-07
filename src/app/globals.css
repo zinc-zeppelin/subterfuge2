@@ -30,9 +30,7 @@ body {
   background-color: #0b0d10;
   color: transparent;
   user-select: none;
-  border-radius: 2px;
-  display: inline-block;
-  min-width: 6rem;
+  border-radius: 4px;
   box-shadow: inset 0 0 4px rgba(255, 255, 255, 0.1);
 }
 

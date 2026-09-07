@@ -25,26 +25,24 @@ export async function POST(
 
     if (!word) {
       return NextResponse.json(
-        { error: "INVALID_REQUEST: Candidate word required" },
+        { error: "INVALID_REQUEST: Word required to remove from slate" },
         { status: 400 }
       );
     }
 
-    const suggestion = await gameStore.addWordSuggestion({
+    const draftSlate = await gameStore.removeSlateWord({
       code,
       sessionToken,
       word,
     });
 
-    const state = await gameStore.getClientGameState(code, sessionToken);
-
-    return NextResponse.json({
-      success: true,
-      suggestion,
-      suggestions: state.teamSuggestions,
-    });
+    return NextResponse.json({ success: true, draftSlate });
   } catch (error: any) {
-    const status = error.message.includes("UNAUTHORIZED") ? 403 : 400;
+    const status = error.message.includes("UNAUTHORIZED")
+      ? 403
+      : error.message.includes("not found")
+      ? 404
+      : 400;
     return NextResponse.json({ error: error.message }, { status });
   }
 }
