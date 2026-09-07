@@ -287,17 +287,26 @@ describe("API Route HTTP Contracts & Input Validation (Unit)", () => {
       const blueOp = room.players.find((p) => p.apparentTeam === "BLUE")!;
 
       // Blue op posts to blue team radio
-      await postMessageHandler(
-        new NextRequest(`http://localhost:3000/api/rooms/${code}/messages`, {
-          method: "POST",
-          headers: { "x-session-token": blueOp.sessionToken },
-          body: JSON.stringify({
-            channelType: "TEAM_BLUE",
-            content: "Blue squad secret frequency",
-          }),
+      const postReq = new NextRequest(`http://localhost:3000/api/rooms/${code}/messages`, {
+        method: "POST",
+        headers: { "x-session-token": blueOp.sessionToken },
+        body: JSON.stringify({
+          channelType: "TEAM_BLUE",
+          content: "Blue squad secret frequency",
         }),
-        { params: { code } }
-      );
+      });
+      const postRes = await postMessageHandler(postReq, { params: { code } });
+      expect(postRes.status).toBe(200);
+
+      // Verify Blue operative can retrieve the created transmission
+      const blueGetReq = new NextRequest(`http://localhost:3000/api/rooms/${code}/messages?channel=TEAM_BLUE`, {
+        method: "GET",
+        headers: { "x-session-token": blueOp.sessionToken },
+      });
+      const blueGetRes = await getMessagesHandler(blueGetReq, { params: { code } });
+      expect(blueGetRes.status).toBe(200);
+      const blueData = await blueGetRes.json();
+      expect(blueData.messages.some((m: any) => m.content === "Blue squad secret frequency")).toBe(true);
 
       // Red op attempts to query TEAM_BLUE channel
       const eavesdropReq = new NextRequest(`http://localhost:3000/api/rooms/${code}/messages?channel=TEAM_BLUE`, {
@@ -306,10 +315,10 @@ describe("API Route HTTP Contracts & Input Validation (Unit)", () => {
       });
       const eavesdropRes = await getMessagesHandler(eavesdropReq, { params: { code } });
       expect(eavesdropRes.status).toBe(200);
-      const data = await eavesdropRes.json();
+      const redData = await eavesdropRes.json();
       // Must NOT contain the blue squad message
-      expect(data.messages.some((m: any) => m.content === "Blue squad secret frequency")).toBe(false);
-      expect(data.messages.length).toBe(0);
+      expect(redData.messages.some((m: any) => m.content === "Blue squad secret frequency")).toBe(false);
+      expect(redData.messages.length).toBe(0);
     });
 
     it("burns DM conversation history between two operatives", async () => {
