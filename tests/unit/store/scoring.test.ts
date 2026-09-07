@@ -220,4 +220,30 @@ describe("Mission Meter Scoring Engine", () => {
     const redResult = ctx.store.calculateTeamVerdictScore(room, "RED", redGuesses);
     expect(redResult.enemyExtractionScore).toBe(33); // 1 out of 3 = 33%
   });
+
+  it("deduplicates repeated words in guesses and does not inflate extraction score", () => {
+    const room = createMockRoom(["BALLET", "TANGO", "WALTZ"], ["STEP", "SWAY", "SPIN"]);
+
+    // Red submits 3 copies of "STEP" instead of finding "SWAY" and "SPIN"
+    const guesses = ["STEP", "STEP", "STEP", "BALLET", "TANGO", "WALTZ"];
+    const result = ctx.store.calculateTeamVerdictScore(room, "RED", guesses);
+
+    // Only 1 out of 3 unique enemy words found = 33% (NOT 100%)
+    expect(result.enemyExtractionScore).toBe(33);
+    expect(result.internalDeductionScore).toBe(0);
+    expect(result.score).toBe(33);
+  });
+
+  it("penalizes duplicate own-word guesses if another allied word is omitted", () => {
+    const room = createMockRoom(["BALLET", "TANGO", "WALTZ"], ["STEP", "SWAY", "SPIN"]);
+
+    // Red guesses all 3 enemy words, but repeats "BALLET" 3 times, omitting "TANGO" and "WALTZ"
+    const guesses = ["STEP", "SWAY", "SPIN", "BALLET", "BALLET", "BALLET"];
+    const result = ctx.store.calculateTeamVerdictScore(room, "RED", guesses);
+
+    expect(result.enemyExtractionScore).toBe(100);
+    // 2 missed allied words: -40% flat penalty
+    expect(result.internalDeductionScore).toBe(40);
+    expect(result.score).toBe(60);
+  });
 });

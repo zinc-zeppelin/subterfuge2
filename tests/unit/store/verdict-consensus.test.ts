@@ -201,4 +201,69 @@ describe("Verdict Deliberation & Two-Member Consensus Protocol (Unit)", () => {
       })
     ).rejects.toThrow(/NO_PROPOSAL_TO_CONFIRM/);
   });
+
+  it("prevents the proposer from self-confirming to unilaterally lock in verdict", async () => {
+    const { code, redOps, playerTokens } = await setupVerdictPhase();
+    const op1 = redOps[0];
+    const op1Token = playerTokens[op1.id];
+
+    // Op 1 proposes verdict
+    const proposal = await store.submitTeamVerdict({
+      code,
+      sessionToken: op1Token,
+      guesses: ["W1", "W2", "W3", "W4", "W5", "W6"],
+      moleIndictmentId: op1.id,
+    });
+    expect(proposal.locked).toBe(false);
+    expect(proposal.confirmedCount).toBe(1);
+
+    // Op 1 attempts to confirm their own proposal
+    const selfConfirm = await store.submitTeamVerdict({
+      code,
+      sessionToken: op1Token,
+      confirmOnly: true,
+    });
+
+    // Must NOT lock in; confirmed count must remain 1
+    expect(selfConfirm.locked).toBe(false);
+    expect(selfConfirm.confirmedCount).toBe(1);
+    expect(selfConfirm.proposedVerdict?.confirmedBy).toEqual([op1.id]);
+  });
+
+  it("returns already locked verdict without mutation if a third teammate attempts confirmation", async () => {
+    const { code, redOps, playerTokens } = await setupVerdictPhase();
+    expect(redOps.length).toBeGreaterThanOrEqual(3);
+    const op1 = redOps[0];
+    const op2 = redOps[1];
+    const op3 = redOps[2];
+
+    const sixWords = ["W1", "W2", "W3", "W4", "W5", "W6"];
+
+    // Op 1 proposes
+    await store.submitTeamVerdict({
+      code,
+      sessionToken: playerTokens[op1.id],
+      guesses: sixWords,
+      moleIndictmentId: op1.id,
+    });
+
+    // Op 2 confirms -> locks!
+    const lockedRes = await store.submitTeamVerdict({
+      code,
+      sessionToken: playerTokens[op2.id],
+      confirmOnly: true,
+    });
+    expect(lockedRes.locked).toBe(true);
+
+    // Op 3 attempts confirmation after lock
+    const postLockRes = await store.submitTeamVerdict({
+      code,
+      sessionToken: playerTokens[op3.id],
+      confirmOnly: true,
+    });
+
+    expect(postLockRes.locked).toBe(true);
+    expect(postLockRes.verdict?.guesses).toEqual(sixWords);
+    expect(postLockRes.verdict?.submittedBy).toBe(op1.id);
+  });
 });

@@ -145,6 +145,39 @@ describe("Mole Clearance Protocol (Unit)", () => {
     expect(requesterState.challengeStatuses[agent.id]).toBe("DENIED");
   });
 
+  it("records DENIED and withholds verification when genuine mole denies challenge", async () => {
+    const { room, moles, players } = await setupActiveRoomWithKnownMole();
+    const mole = moles[0];
+
+    const opposingCoverOp = players.find(
+      (p) => p.actualTeam === mole.actualTeam && p.role === "AGENT"
+    )!;
+
+    const challenge = await store.initiateMoleChallenge({
+      code: room.code,
+      sessionToken: opposingCoverOp.sessionToken,
+      targetPlayerId: mole.id,
+    });
+
+    const response = await store.respondMoleChallenge({
+      code: room.code,
+      sessionToken: mole.sessionToken,
+      challengeId: challenge.id,
+      action: "DENY",
+    });
+
+    expect(response.success).toBe(false);
+    expect(response.isMole).toBe(false);
+    expect(response.message).toMatch(/Clearance Declined/i);
+
+    const verifications = await store.getMoleVerifications(room.code, opposingCoverOp.sessionToken);
+    expect(verifications.some((v) => v.moleId === mole.id)).toBe(false);
+
+    const requesterState = await store.getClientGameState(room.code, opposingCoverOp.sessionToken);
+    expect(requesterState.verifiedAssets).not.toContain(mole.id);
+    expect(requesterState.challengeStatuses[mole.id]).toBe("DECLINED");
+  });
+
   it("prevents third-party operatives from accessing another operative's verified assets", async () => {
     const { room, moles, players } = await setupActiveRoomWithKnownMole();
     const mole = moles[0];

@@ -192,7 +192,7 @@ describe("API Route HTTP Contracts & Input Validation (Unit)", () => {
       expect(data.phase).toBe("LOBBY");
     });
 
-    it("returns sanitized client state for authenticated operative", async () => {
+    it("returns sanitized client state for authenticated operative with strict redactions", async () => {
       const { code, tokens } = await setupActiveRoom();
 
       const req = new NextRequest(`http://localhost:3000/api/rooms/${code}/state`, {
@@ -204,6 +204,21 @@ describe("API Route HTTP Contracts & Input Validation (Unit)", () => {
       const data = await res.json();
       expect(data.self.displayName).toBe("Host");
       expect(data.self.assignedWord).toBeDefined();
+
+      // Master codebook and theme must remain strictly redacted before midpoint/debrief
+      expect(data.codebook).toBeUndefined();
+      expect(data.room.declassifiedTheme).toBeUndefined();
+
+      // Roster must redact all other players' secret words, roles, and actual teams
+      expect(data.players.length).toBe(6);
+      for (const player of data.players) {
+        expect(player.displayName).toBeDefined();
+        expect(player.apparentTeam).toBeDefined();
+        expect(player.isReady).toBeDefined();
+        expect(player.assignedWord).toBeUndefined();
+        expect(player.role).toBeUndefined();
+        expect(player.actualTeam).toBeUndefined();
+      }
     });
   });
 
@@ -264,6 +279,37 @@ describe("API Route HTTP Contracts & Input Validation (Unit)", () => {
       const data = await getRes.json();
       expect(data.messages.some((m: any) => m.content === "Testing wire broadcast")).toBe(true);
       expect(data.messages.some((m: any) => m.content === "Classified team radio chatter")).toBe(false);
+    });
+
+    it("strictly blocks operatives from querying opposing team radio transmissions", async () => {
+      const { code, room } = await setupActiveRoom();
+      const redOp = room.players.find((p) => p.apparentTeam === "RED")!;
+      const blueOp = room.players.find((p) => p.apparentTeam === "BLUE")!;
+
+      // Blue op posts to blue team radio
+      await postMessageHandler(
+        new NextRequest(`http://localhost:3000/api/rooms/${code}/messages`, {
+          method: "POST",
+          headers: { "x-session-token": blueOp.sessionToken },
+          body: JSON.stringify({
+            channelType: "TEAM_BLUE",
+            content: "Blue squad secret frequency",
+          }),
+        }),
+        { params: { code } }
+      );
+
+      // Red op attempts to query TEAM_BLUE channel
+      const eavesdropReq = new NextRequest(`http://localhost:3000/api/rooms/${code}/messages?channel=TEAM_BLUE`, {
+        method: "GET",
+        headers: { "x-session-token": redOp.sessionToken },
+      });
+      const eavesdropRes = await getMessagesHandler(eavesdropReq, { params: { code } });
+      expect(eavesdropRes.status).toBe(200);
+      const data = await eavesdropRes.json();
+      // Must NOT contain the blue squad message
+      expect(data.messages.some((m: any) => m.content === "Blue squad secret frequency")).toBe(false);
+      expect(data.messages.length).toBe(0);
     });
 
     it("burns DM conversation history between two operatives", async () => {
@@ -478,6 +524,57 @@ describe("API Route HTTP Contracts & Input Validation (Unit)", () => {
       expect(res.status).toBe(400);
       const data = await res.json();
       expect(data.error).toMatch(/INVALID_INDICTMENT/i);
+    });
+
+    it("rejects attempt to indict an operative on the opposing team with 400", async () => {
+      const { code, room } = await setupActiveRoom();
+      await gameStore.warpTimer({ code, target: "VERDICT" });
+
+      const redOp = room.players.find((p) => p.apparentTeam === "RED")!;
+      const blueOp = room.players.find((p) => p.apparentTeam === "BLUE")!;
+
+      // Red operative tries to indict a Blue operative
+      const req = new NextRequest(`http://localhost:3000/api/rooms/${code}/verdict/indict`, {
+        method: "POST",
+        headers: { "x-session-token": redOp.sessionToken },
+        body: JSON.stringify({ moleIndictmentId: blueOp.id }),
+      });
+      const res = await indictHandler(req, { params: { code } });
+      expect(res.status).toBe(400);
+      const data = await res.json();
+      expect(data.error).toMatch(/own team/i);
+    });
+
+    it("allows setting and clearing mole indictment for own teammate", async () => {
+      const { code, room } = await setupActiveRoom();
+      await gameStore.warpTimer({ code, target: "VERDICT" });
+
+      const redOps = room.players.filter((p) => p.apparentTeam === "RED");
+      expect(redOps.length).toBeGreaterThanOrEqual(2);
+      const op1 = redOps[0];
+      const op2 = redOps[1];
+
+      // Set indictment to teammate op2
+      const setReq = new NextRequest(`http://localhost:3000/api/rooms/${code}/verdict/indict`, {
+        method: "POST",
+        headers: { "x-session-token": op1.sessionToken },
+        body: JSON.stringify({ moleIndictmentId: op2.id }),
+      });
+      const setRes = await indictHandler(setReq, { params: { code } });
+      expect(setRes.status).toBe(200);
+      const setData = await setRes.json();
+      expect(setData.draftSlate.moleIndictmentId).toBe(op2.id);
+
+      // Clear indictment with null
+      const clearReq = new NextRequest(`http://localhost:3000/api/rooms/${code}/verdict/indict`, {
+        method: "POST",
+        headers: { "x-session-token": op1.sessionToken },
+        body: JSON.stringify({ moleIndictmentId: null }),
+      });
+      const clearRes = await indictHandler(clearReq, { params: { code } });
+      expect(clearRes.status).toBe(200);
+      const clearData = await clearRes.json();
+      expect(clearData.draftSlate.moleIndictmentId).toBeUndefined();
     });
   });
 
