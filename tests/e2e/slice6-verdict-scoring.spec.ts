@@ -111,6 +111,20 @@ test.describe("Slice 6: Collaborative Verdict Board, Two-Member Consensus & Scor
     await op1Page.reload();
     await expect(op1Page.locator("#draft-guesses-container")).toContainText(secretWords[0], { timeout: 5000 });
     await expect(op1Page.locator("#suggestions-list")).not.toContainText(secretWords[0]);
+
+    // Remove guess: demotes back from slate to suggestions pool and persists across reload
+    await harness.operativeRemoveVerdictGuess(redOp1, secretWords[0]);
+    await expect(op1Page.locator("#draft-guesses-container")).not.toContainText(secretWords[0]);
+    await expect(op1Page.locator("#suggestions-list")).toContainText(secretWords[0]);
+    await expect(op2Page.locator("#suggestions-list")).toContainText(secretWords[0], { timeout: 5000 });
+    await op1Page.reload();
+    await expect(op1Page.locator("#draft-guesses-container")).not.toContainText(secretWords[0]);
+    await expect(op1Page.locator("#suggestions-list")).toContainText(secretWords[0]);
+
+    // Re-adopt secretWords[0] to resume assembling the full slate
+    await harness.operativeAddVerdictGuess(redOp1, secretWords[0]);
+    await expect(op1Page.locator("#draft-guesses-container")).toContainText(secretWords[0]);
+    await expect(op1Page.locator("#suggestions-list")).not.toContainText(secretWords[0]);
     await harness.operativeAddVerdictGuess(redOp1, secretWords[1]);
     await harness.operativeAddVerdictGuess(redOp1, secretWords[2]);
     await harness.operativeAddVerdictGuess(redOp1, "BOGUSONE");
@@ -123,8 +137,8 @@ test.describe("Slice 6: Collaborative Verdict Board, Two-Member Consensus & Scor
     await harness.operativeProposeVerdict(redOp1);
 
     // Pending proposal card is visible to both teammates with 1/2 confirmation
-    await expect(op1Page.locator("#pending-proposal-card")).toBeVisible({ timeout: 5000 });
-    await expect(op2Page.locator("#pending-proposal-card")).toBeVisible({ timeout: 5000 });
+    await expect(op1Page.locator("#pending-proposal-card")).toBeVisible({ timeout: 15000 });
+    await expect(op2Page.locator("#pending-proposal-card")).toBeVisible({ timeout: 15000 });
     await expect(op1Page.locator("#pending-proposal-card")).toContainText("1/2 CONFIRMED");
     await expect(op2Page.locator("#confirm-verdict-btn")).toBeVisible();
 

@@ -1133,6 +1133,8 @@ export default function RoomPage() {
           await fetchState();
         }
       }
+    } catch (err) {
+      console.error("[handleProposeWord] Network error:", err);
     } finally {
       setIsProposing(false);
     }
@@ -1322,25 +1324,31 @@ export default function RoomPage() {
 
   const handleBurnBriefing = async () => {
     if (!gameState?.self?.assignedWord) return;
-    if (briefingWordInput.trim().toUpperCase() !== gameState.self.assignedWord.toUpperCase()) return;
+    const wordInput = briefingWordInput.trim();
+    if (wordInput.toUpperCase() !== gameState.self.assignedWord.toUpperCase()) return;
     if (typeof window !== "undefined" && code && gameState.self.id) {
       sessionStorage.setItem(`subterfuge_briefing_burned_${code}_${gameState.self.id}`, "true");
     }
     setIsBriefingBurned(true);
-    setBriefingWordInput("");
 
     const token = gameState.self.sessionToken || getSessionToken() || "";
     try {
-      await authFetch(`/api/rooms/${code}/briefing/burn`, {
+      const res = await authFetch(`/api/rooms/${code}/briefing/burn`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ sessionToken: token }),
+        body: JSON.stringify({ sessionToken: token, codeword: wordInput }),
       });
+      if (!res.ok) throw new Error("Burn request rejected");
+      setBriefingWordInput("");
       await fetchState();
     } catch (err) {
       console.error("Failed to sync briefing burn with server", err);
+      if (typeof window !== "undefined" && code && gameState.self?.id) {
+        sessionStorage.removeItem(`subterfuge_briefing_burned_${code}_${gameState.self.id}`);
+      }
+      setIsBriefingBurned(false);
     }
   };
 

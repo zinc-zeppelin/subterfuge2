@@ -34,6 +34,9 @@ export class SixPlayerHarness {
     for (let i = 0; i < 6; i++) {
       const context = await this.browser.newContext();
       const page = await context.newPage();
+      page.on("pageerror", (err) => {
+        console.error(`[Browser ${i} ${callsigns[i]} PageError]`, err);
+      });
       this.sessions.push({
         index: i,
         callsign: callsigns[i],
@@ -153,15 +156,26 @@ export class SixPlayerHarness {
   public async acknowledgeBriefing(playerIndex: number): Promise<void> {
     const op = this.sessions[playerIndex];
     const modal = op.page.locator("#operational-briefing-modal");
+    let isVisible = false;
     try {
       await modal.waitFor({ state: "visible", timeout: 3000 });
+      isVisible = true;
+    } catch {
+      // modal not present (already burned)
+      return;
+    }
+
+    if (isVisible) {
       const wordAttr = await modal.getAttribute("data-assigned-word");
       const word = wordAttr || (await op.page.locator("#briefing-assigned-word").innerText());
       await op.page.fill("#briefing-codeword-input", word.trim());
-      await op.page.click("#burn-briefing-btn", { force: true });
+      await expect(op.page.locator("#burn-briefing-btn")).toBeEnabled({ timeout: 5000 });
+      await op.page.click("#burn-briefing-btn");
       await expect(modal).not.toBeVisible({ timeout: 5000 });
-    } catch {
-      // modal not present or already burned
+      // Verify operative reaches ACTIVE status
+      await expect(
+        op.page.locator("[id^='roster-player-']", { hasText: "YOU" }).getByText("ACTIVE")
+      ).toBeVisible({ timeout: 10000 });
     }
   }
 
@@ -433,11 +447,10 @@ export class SixPlayerHarness {
     const op = this.sessions[playerIndex];
     const upper = word.trim().toUpperCase();
     const removeBtn = op.page.locator(`#remove-slate-word-${upper.toLowerCase()}`);
-    if (await removeBtn.isVisible().catch(() => false)) {
-      await removeBtn.click();
-      await removeBtn.waitFor({ state: "detached", timeout: 12000 });
-      await op.page.locator(`#adopt-word-btn-${upper}`).waitFor({ state: "visible", timeout: 12000 });
-    }
+    await removeBtn.waitFor({ state: "visible", timeout: 12000 });
+    await removeBtn.click();
+    await removeBtn.waitFor({ state: "detached", timeout: 12000 });
+    await op.page.locator(`#adopt-word-btn-${upper}`).waitFor({ state: "visible", timeout: 12000 });
   }
 
   /**
@@ -450,6 +463,7 @@ export class SixPlayerHarness {
     await transmitBtn.waitFor({ state: "visible", timeout: 5000 });
     await transmitBtn.click();
     await op.page.locator("#verdict-confirmation-modal").waitFor({ state: "hidden", timeout: 5000 });
+    await expect(op.page.locator("#pending-proposal-card")).toBeVisible({ timeout: 15000 });
     // Awaken background tabs so teammates see the proposal immediately
     for (const session of this.sessions) {
       await session.page.evaluate(() => {

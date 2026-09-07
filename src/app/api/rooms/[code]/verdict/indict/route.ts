@@ -20,13 +20,26 @@ export async function POST(
       );
     }
 
-    const body = await req.json();
+    const body = await req.json().catch(() => ({}));
     const { moleIndictmentId } = body;
+
+    if (
+      moleIndictmentId !== undefined &&
+      moleIndictmentId !== null &&
+      typeof moleIndictmentId !== "string"
+    ) {
+      return NextResponse.json(
+        { error: "INVALID_INDICTMENT: moleIndictmentId must be a string or omitted" },
+        { status: 400 }
+      );
+    }
+
+    const cleanId = typeof moleIndictmentId === "string" ? moleIndictmentId.trim() : undefined;
 
     const draftSlate = await gameStore.setSlateMoleIndictment({
       code,
       sessionToken,
-      moleIndictmentId,
+      moleIndictmentId: cleanId || undefined,
     });
 
     return NextResponse.json({ success: true, draftSlate });
