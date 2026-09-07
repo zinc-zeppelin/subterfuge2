@@ -362,10 +362,13 @@ export class SixPlayerHarness {
    */
   public async warpTime(target: "MIDPOINT" | "VERDICT"): Promise<void> {
     if (!this.roomCode) throw new Error("Room code not set");
-    const page = this.sessions[0].page;
-    const res = await page.request.post(`/api/rooms/${this.roomCode}/timer/warp`, {
+    const hostSession = this.sessions[0];
+    const hostToken = await hostSession.page.evaluate((code) => {
+      return sessionStorage.getItem(`subterfuge_session_${code}`) || localStorage.getItem(`subterfuge_session_${code}`) || "";
+    }, this.roomCode);
+    const res = await hostSession.page.request.post(`/api/rooms/${this.roomCode}/timer/warp`, {
       data: { target },
-      headers: { "x-subterfuge-dev": "true" },
+      headers: hostToken ? { "x-session-token": hostToken } : {},
     });
     if (!res.ok()) {
       throw new Error(`Failed to warp time: ${await res.text()}`);

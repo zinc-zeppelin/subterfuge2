@@ -52,6 +52,8 @@ export async function POST(
   } catch (error: any) {
     const status = error.message.includes("NOT_FOUND")
       ? 404
+      : error.message.includes("OPERATIVE_EXISTS")
+      ? 409
       : error.message.includes("LOCKED") || error.message.includes("CAPACITY")
       ? 400
       : 500;

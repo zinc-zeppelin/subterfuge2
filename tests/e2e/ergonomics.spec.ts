@@ -1,7 +1,17 @@
+/**
+ * Domain: Playtest Ergonomics & Dev Controls
+ *
+ * Covers:
+ *  - Real hold-and-release, mole screen identity masking & camouflage word spoofing
+ *  - Channel unread badges & incoming DM alert toasts
+ *  - Differentiated clearance decline behaviour
+ *  - Dev mode HUD with phase warp controls (was Slice 13)
+ */
+
 import { test, expect } from "@playwright/test";
 import { SixPlayerHarness } from "../harness/multiplayer-harness";
 
-test.describe("Slice 13: Playtesting Enhancements & Dev Mode Controls", () => {
+test.describe("Ergonomics — Playtest Polish, Anti-Shoulder-Surfing & Dev HUD", () => {
   let harness: SixPlayerHarness;
 
   test.beforeEach(async ({ browser }) => {
@@ -12,13 +22,10 @@ test.describe("Slice 13: Playtesting Enhancements & Dev Mode Controls", () => {
     await harness.teardown();
   });
 
-  test("verifies real hold-and-release, mole screen disguise, unread badges, DM alerts, and dev mode HUD", async ({
-    baseURL,
-  }) => {
+  test("verifies real hold-and-release, mole screen disguise, unread badges, DM alerts, and dev mode HUD", async ({ baseURL }) => {
     test.setTimeout(120000);
     const url = baseURL || "http://localhost:3000";
 
-    // 1. Initialize sessions
     await harness.initSessions([
       "Operative-1",
       "Operative-2",
@@ -50,7 +57,7 @@ test.describe("Slice 13: Playtesting Enhancements & Dev Mode Controls", () => {
     await harness.hostStartsOperation();
     await harness.expectAllInInfiltrationPhase();
 
-    // 2. Identify Mole, Field Agent, and opposing operative
+    // Identify Mole and Field Agent
     let moleIdx = -1;
     let agentIdx = -1;
 
@@ -69,7 +76,7 @@ test.describe("Slice 13: Playtesting Enhancements & Dev Mode Controls", () => {
     const molePage = harness.sessions[moleIdx].page;
     const moleDossier = await harness.getPlayerDossier(moleIdx);
 
-    // 3. Test Mole Cover Identity Masking & Camouflage Word Spoofing
+    // Test Mole Cover Identity Masking & Camouflage Word Spoofing
     // Mole screen displays symmetrical cover identity matching innocent teammates (AGENT)!
     await expect(molePage.locator("#self-role")).toHaveText("AGENT");
     await expect(molePage.locator("#self-word-redacted")).toBeVisible();
@@ -119,7 +126,7 @@ test.describe("Slice 13: Playtesting Enhancements & Dev Mode Controls", () => {
     await expect(molePage.locator("#self-assigned-word")).toHaveText(authenticWord);
     await molePage.dispatchEvent("#decrypt-word-btn", "mouseup");
 
-    // 4. Test Channel Unread Badges & Incoming DM Alert Toast
+    // Test Channel Unread Badges & Incoming DM Alert Toast
     const op1Dossier = await harness.getPlayerDossier(0);
     let opposingOpIdx = -1;
     for (let i = 1; i < 6; i++) {
@@ -140,7 +147,7 @@ test.describe("Slice 13: Playtesting Enhancements & Dev Mode Controls", () => {
     await harness.selectDMPeer(opposingOpIdx, 0);
     await harness.sendMessage(opposingOpIdx, "AGENT_CONTACT_SIGMA");
 
-    // Op 1 (who is currently on PUBLIC wire) should see unread badge on Direct Line tab
+    // Op 1 (on PUBLIC wire) should see unread badge on Direct Line tab
     await expect(op1.page.locator("#unread-badge-dm")).toBeVisible({ timeout: 10000 });
 
     // And clickable incoming transmission toast alert
@@ -152,7 +159,7 @@ test.describe("Slice 13: Playtesting Enhancements & Dev Mode Controls", () => {
     await expect(op1.page.locator("#tab-dm")).toHaveClass(/bg-classified-amber/);
     await expect(op1.page.locator("#unread-badge-dm")).toBeHidden();
 
-    // 5. Test Differentiated Clearance Decline
+    // Test Differentiated Clearance Decline
     await harness.selectDMPeer(0, opposingOpIdx);
     await op1.page.click("#verify-credentials-btn");
     await expect(opposingPage.locator("#clearance-challenge-modal")).toBeVisible({ timeout: 10000 });
@@ -169,16 +176,13 @@ test.describe("Slice 13: Playtesting Enhancements & Dev Mode Controls", () => {
     await expect(op1.page.locator("#clearance-declined-badge")).toBeVisible({ timeout: 10000 });
     await expect(op1.page.locator("#clearance-denied-badge")).toBeHidden();
 
-    // 6. Test Dev Mode Phase Warps
-    // Warp to Midpoint
+    // Test Dev Mode Phase Warps
     await op1.page.click("#dev-warp-midpoint-btn");
     await expect(op1.page.locator("#declassified-theme-banner")).toBeVisible({ timeout: 10000 });
 
-    // Warp to Verdict
     await op1.page.click("#dev-warp-verdict-btn");
     await expect(op1.page.locator("#verdict-board")).toBeVisible({ timeout: 10000 });
 
-    // Fast-Forward to Debrief
     await op1.page.click("#dev-warp-debrief-btn");
     await expect(op1.page.locator("#debrief-winner-banner")).toBeVisible({ timeout: 10000 });
   });

@@ -71,6 +71,8 @@ export default function RoomPage() {
   const [verdictWordInput, setVerdictWordInput] = useState("");
   const [verdictGuesses, setVerdictGuesses] = useState<string[]>([]);
   const [moleIndictmentId, setMoleIndictmentId] = useState<string>("");
+  const [isUpdatingIndictment, setIsUpdatingIndictment] = useState(false);
+  const isUpdatingIndictmentRef = useRef(false);
   const [isSubmittingVerdict, setIsSubmittingVerdict] = useState(false);
   const [verdictError, setVerdictError] = useState<string | null>(null);
   const [isRematching, setIsRematching] = useState(false);
@@ -303,7 +305,7 @@ export default function RoomPage() {
       setGameState(data);
       if (data.draftSlate) {
         setVerdictGuesses(data.draftSlate.words || []);
-        if (data.draftSlate.moleIndictmentId !== undefined) {
+        if (data.draftSlate.moleIndictmentId !== undefined && !isUpdatingIndictmentRef.current) {
           setMoleIndictmentId(data.draftSlate.moleIndictmentId || "");
         }
       }
@@ -1208,16 +1210,29 @@ export default function RoomPage() {
   };
 
   const handleSelectMoleIndictment = async (moleId: string) => {
+    const previous = moleIndictmentId;
     setMoleIndictmentId(moleId);
     if (!code) return;
+    setIsUpdatingIndictment(true);
+    isUpdatingIndictmentRef.current = true;
     try {
-      await authFetch(`/api/rooms/${code}/verdict/indict`, {
+      const res = await authFetch(`/api/rooms/${code}/verdict/indict`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ moleIndictmentId: moleId }),
       });
+      if (!res.ok) throw new Error("Indictment rejected");
+      const data = await res.json();
+      if (data.draftSlate) {
+        setMoleIndictmentId(data.draftSlate.moleIndictmentId || "");
+      }
     } catch (err) {
       console.error(err);
+      setMoleIndictmentId(previous);
+      setVerdictError("Failed to record mole indictment. Select again.");
+    } finally {
+      setIsUpdatingIndictment(false);
+      isUpdatingIndictmentRef.current = false;
     }
   };
 
@@ -1246,12 +1261,12 @@ export default function RoomPage() {
   };
 
   const handleSubmitVerdict = () => {
-    if (!code || isSubmittingVerdict || verdictGuesses.length < players.length) return;
+    if (!code || isSubmittingVerdict || isUpdatingIndictment || verdictGuesses.length < players.length) return;
     setIsConfirmingVerdict(true);
   };
 
   const executeSubmitVerdict = async (confirmOnly: boolean = false) => {
-    if (!code || isSubmittingVerdict) return;
+    if (!code || isSubmittingVerdict || isUpdatingIndictment) return;
     if (!confirmOnly && verdictGuesses.length < players.length) {
       setVerdictError(`All ${players.length} global code words must be adopted into slate before proposing.`);
       return;
@@ -2834,7 +2849,7 @@ export default function RoomPage() {
                         ) : (
                           <button
                             id="confirm-verdict-btn"
-                            disabled={isSubmittingVerdict}
+                            disabled={isSubmittingVerdict || isUpdatingIndictment}
                             onClick={() => executeSubmitVerdict(true)}
                             className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold px-5 py-2.5 rounded text-xs uppercase tracking-widest transition-colors shadow-lg border border-emerald-400 flex items-center justify-center gap-2 min-h-[44px] cursor-pointer active:scale-95"
                           >
@@ -3032,7 +3047,7 @@ export default function RoomPage() {
 
                       <button
                         id="lock-in-verdict-btn"
-                        disabled={isSubmittingVerdict || verdictGuesses.length !== players.length}
+                        disabled={isSubmittingVerdict || isUpdatingIndictment || verdictGuesses.length !== players.length}
                         onClick={handleSubmitVerdict}
                         className="bg-classified-crimson hover:bg-red-700 disabled:opacity-50 text-white font-bold px-5 py-2.5 rounded text-xs uppercase tracking-widest transition-colors shadow-lg border border-red-500 flex items-center justify-center gap-2 min-h-[44px] active:scale-95 cursor-pointer"
                         title={
@@ -3890,8 +3905,9 @@ export default function RoomPage() {
               <button
                 id="transmit-proposal-btn"
                 type="button"
+                disabled={isSubmittingVerdict || isUpdatingIndictment}
                 onClick={() => executeSubmitVerdict(false)}
-                className="min-h-[44px] px-4 py-2 bg-classified-amber text-black hover:bg-amber-400 font-mono font-bold uppercase text-xs tracking-wider rounded transition-colors flex items-center gap-1.5 cursor-pointer active:scale-95"
+                className="min-h-[44px] px-4 py-2 bg-classified-amber text-black hover:bg-amber-400 disabled:opacity-50 font-mono font-bold uppercase text-xs tracking-wider rounded transition-colors flex items-center gap-1.5 cursor-pointer active:scale-95"
               >
                 <Lock className="w-4 h-4" />
                 TRANSMIT PROPOSAL
@@ -4205,7 +4221,7 @@ export default function RoomPage() {
                   onClick={async () => {
                     setIsDevActionLoading(true);
                     try {
-                      const res = await fetch(`/api/rooms/${code}/dev`, {
+                      const res = await authFetch(`/api/rooms/${code}/dev`, {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ action: "fill_bots" }),
@@ -4229,9 +4245,9 @@ export default function RoomPage() {
                   onClick={async () => {
                     setIsDevActionLoading(true);
                     try {
-                      const res = await fetch(`/api/rooms/${code}/timer/warp`, {
+                      const res = await authFetch(`/api/rooms/${code}/timer/warp`, {
                         method: "POST",
-                        headers: { "Content-Type": "application/json", "x-subterfuge-dev": "true" },
+                        headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ target: "MIDPOINT" }),
                       });
                       if (res.ok) await fetchState();
@@ -4253,9 +4269,9 @@ export default function RoomPage() {
                   onClick={async () => {
                     setIsDevActionLoading(true);
                     try {
-                      const res = await fetch(`/api/rooms/${code}/timer/warp`, {
+                      const res = await authFetch(`/api/rooms/${code}/timer/warp`, {
                         method: "POST",
-                        headers: { "Content-Type": "application/json", "x-subterfuge-dev": "true" },
+                        headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ target: "VERDICT" }),
                       });
                       if (res.ok) await fetchState();
@@ -4277,9 +4293,9 @@ export default function RoomPage() {
                   onClick={async () => {
                     setIsDevActionLoading(true);
                     try {
-                      const res = await fetch(`/api/rooms/${code}/timer/warp`, {
+                      const res = await authFetch(`/api/rooms/${code}/timer/warp`, {
                         method: "POST",
-                        headers: { "Content-Type": "application/json", "x-subterfuge-dev": "true" },
+                        headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ target: "DEBRIEF" }),
                       });
                       if (res.ok) await fetchState();
@@ -4299,7 +4315,7 @@ export default function RoomPage() {
                 onClick={async () => {
                   if (!isGodMode) {
                     try {
-                      const res = await fetch(`/api/rooms/${code}/dev`, {
+                      const res = await authFetch(`/api/rooms/${code}/dev`, {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ action: "god_mode" }),
@@ -4330,7 +4346,7 @@ export default function RoomPage() {
                 onClick={async () => {
                   setIsDevActionLoading(true);
                   try {
-                    const res = await fetch(`/api/rooms/${code}/dev`, {
+                    const res = await authFetch(`/api/rooms/${code}/dev`, {
                       method: "POST",
                       headers: { "Content-Type": "application/json" },
                       body: JSON.stringify({ action: "reset_lobby" }),
