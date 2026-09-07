@@ -20,8 +20,25 @@ export async function POST(
       );
     }
 
-    const body = await req.json().catch(() => ({}));
-    const { moleIndictmentId } = body;
+    // Parse body explicitly — JSON parse failures or non-object payloads return 400
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json(
+        { error: "INVALID_REQUEST: Request body must be valid JSON" },
+        { status: 400 }
+      );
+    }
+
+    if (typeof body !== "object" || body === null || Array.isArray(body)) {
+      return NextResponse.json(
+        { error: "INVALID_REQUEST: Request body must be a JSON object" },
+        { status: 400 }
+      );
+    }
+
+    const { moleIndictmentId } = body as Record<string, unknown>;
 
     if (
       moleIndictmentId !== undefined &&
