@@ -651,6 +651,7 @@ export default function RoomPage() {
   };
 
   const hasGameSession = !!gameState?.self?.id;
+  const currentPhase = gameState?.room?.phase;
 
   useEffect(() => {
     fetchState();
@@ -658,53 +659,90 @@ export default function RoomPage() {
 
   useEffect(() => {
     if (!hasGameSession) return;
-    fetchMessages();
-    const interval = setInterval(() => {
-      fetchState();
-      fetchMessages();
-    }, 2000);
 
-    // Web Worker unthrottled background timer to defeat browser 60s background throttling
-    let bgWorker: Worker | null = null;
-    try {
-      const workerBlob = new Blob(
-        [
-          `let timer = null;
-           self.onmessage = function(e) {
-             if (e.data === 'start') {
-               if (!timer) timer = setInterval(function() { self.postMessage('tick'); }, 2000);
-             } else if (e.data === 'stop') {
-               if (timer) { clearInterval(timer); timer = null; }
-             }
-           };`,
-        ],
-        { type: "application/javascript" }
-      );
-      const workerUrl = URL.createObjectURL(workerBlob);
-      bgWorker = new Worker(workerUrl);
-      bgWorker.onmessage = () => {
-        if (typeof window !== "undefined" && (!document.hasFocus() || document.hidden)) {
-          fetchState();
-          fetchMessages();
-        }
-      };
-      bgWorker.postMessage("start");
-    } catch {
-      // Worker fallback
+    let isMounted = true;
+    let timerId: NodeJS.Timeout | null = null;
+    let lastActivity = Date.now();
+
+    const recordActivity = () => {
+      lastActivity = Date.now();
+    };
+
+    if (typeof window !== "undefined") {
+      window.addEventListener("pointerdown", recordActivity, { passive: true });
+      window.addEventListener("keydown", recordActivity, { passive: true });
+      window.addEventListener("touchstart", recordActivity, { passive: true });
     }
 
-    return () => {
-      clearInterval(interval);
-      if (bgWorker) {
-        try {
-          bgWorker.postMessage("stop");
-          bgWorker.terminate();
-        } catch {
-          // cleanup fallback
+    const poll = async () => {
+      if (!isMounted) return;
+
+      // When tab is hidden/backgrounded, pause completely — 0 requests.
+      if (typeof document !== "undefined" && document.hidden) {
+        return;
+      }
+
+      const isIdle = Date.now() - lastActivity > 45000;
+      // Active: 3.5s; Idle: 12s
+      const nextDelay = isIdle ? 12000 : 3500;
+
+      try {
+        await fetchState();
+        // Only fetch comms messages during active espionage or verdict phases
+        if (currentPhase && currentPhase !== "LOBBY") {
+          await fetchMessages();
+        }
+      } catch (err) {
+        console.warn("[Polling] Sync failed", err);
+      } finally {
+        if (isMounted && typeof document !== "undefined" && !document.hidden) {
+          timerId = setTimeout(poll, nextDelay);
         }
       }
     };
-  }, [hasGameSession, fetchState, fetchMessages]);
+
+    const handleVisibilityChange = () => {
+      if (typeof document === "undefined") return;
+      if (document.hidden) {
+        if (timerId) {
+          clearTimeout(timerId);
+          timerId = null;
+        }
+      } else {
+        // Immediate single refresh upon refocusing tab
+        recordActivity();
+        if (timerId) clearTimeout(timerId);
+        poll();
+      }
+    };
+
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", handleVisibilityChange);
+    }
+
+    // Initial message fetch if beyond lobby
+    if (currentPhase && currentPhase !== "LOBBY") {
+      fetchMessages();
+    }
+
+    // Schedule first poll
+    if (typeof document !== "undefined" && !document.hidden) {
+      timerId = setTimeout(poll, 3500);
+    }
+
+    return () => {
+      isMounted = false;
+      if (timerId) clearTimeout(timerId);
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", handleVisibilityChange);
+      }
+      if (typeof window !== "undefined") {
+        window.removeEventListener("pointerdown", recordActivity);
+        window.removeEventListener("keydown", recordActivity);
+        window.removeEventListener("touchstart", recordActivity);
+      }
+    };
+  }, [hasGameSession, fetchState, fetchMessages, currentPhase]);
 
   useEffect(() => {
     if (typeof window !== "undefined" && "serviceWorker" in navigator) {

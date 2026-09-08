@@ -2,7 +2,7 @@ import { chromium, Browser, BrowserContext, Page } from "playwright";
 import * as fs from "fs";
 import * as path from "path";
 
-const TARGET_URL = process.env.PLAYTEST_URL || "https://subterfuge2.vercel.app";
+const TARGET_URL = process.env.PLAYTEST_URL || "http://localhost:3000";
 const SCREENSHOT_DIR = path.resolve(process.cwd(), "screenshots/playtest-6p");
 
 interface Operative {
