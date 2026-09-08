@@ -35,8 +35,9 @@ subterfuge2/
 │   │   │           ├── mole/respond/route.ts   # POST mole challenge response
 │   │   │           ├── verdict/suggest/route.ts# POST nominate candidate word
 │   │   │           ├── verdict/vote/route.ts   # POST upvote candidate word
-│   │   │           ├── verdict/submit/route.ts # POST lock in verdict (spymaster only)
-│   │   │           └── rematch/route.ts    # POST reset room to lobby (host only)
+│   │   │           ├── verdict/submit/route.ts # POST lock in verdict (two-member consensus)
+│   │   │           ├── settings/route.ts       # PATCH/POST update room duration settings (host only)
+│   │   │           └── rematch/route.ts        # POST reset room to lobby (host only)
 │   │   ├── room/
 │   │   │   └── [code]/
 │   │   │       └── page.tsx                # Unified client interface (Lobby, Infiltration, Verdict, Debrief)
@@ -46,8 +47,10 @@ subterfuge2/
 │   └── lib/
 │       ├── store/
 │       │   └── game-store.ts               # Core game engine, room manager, scoring & persistence
-│       └── types/
-│           └── game.ts                     # TypeScript data models, state contracts & enums
+│       ├── types/
+│       │   └── game.ts                     # TypeScript data models, state contracts & enums
+│       └── utils/
+│           └── dossier.ts                  # Classified debrief dossier generator & share formatting
 ├── tests/
 │   ├── harness/
 │   │   └── multiplayer-harness.ts          # Multi-context Playwright test utility
@@ -60,9 +63,10 @@ subterfuge2/
 │   │   ├── session-recovery.spec.ts        # Recovery links, auto-resume & mid-game recovery portal
 │   │   ├── mobile-responsive.spec.ts       # iOS Safari (WebKit) & Android Chrome (Chromium) audit
 │   │   └── ergonomics.spec.ts              # Playtest polish, anti-shoulder-surfing & dev HUD
-│   └── unit/                               # Vitest unit & contract tests (100 tests)
+│   └── unit/                               # Vitest unit & contract tests (124 tests)
 │       ├── helpers/test-store.ts           # Isolated in-memory store for deterministic unit tests
 │       ├── data/word-bank.test.ts          # Word bank uniqueness & theme coverage
+│       ├── utils/dossier.test.ts           # Classified mission dossier formatting tests
 │       ├── store/
 │       │   ├── scoring.test.ts             # Mission meter scoring engine
 │       │   ├── role-balancing.test.ts      # Team & mole assignment for all player counts
@@ -107,6 +111,13 @@ Before modifying game logic, agents must understand the core rules:
    - **Mole Win Condition:** Moles win if and only if their *actual* team wins.
 6. **Rematch Loop:**
    - In `DEBRIEF`, the Host can click **"Commence Rematch // Return to Lobby"** to reset the room state, shuffle roles and codebook, and keep all players connected in the lobby.
+7. **Configurable Mission Duration (1–24 Hours, 12h Default):**
+   - The operation host can configure the duration of an espionage mission between 1 and 24 hours (inclusive, integer bounds) during room creation on the home page or dynamically in the lobby via `#host-duration-config-card` (`PATCH /api/rooms/[code]/settings`).
+   - Default mission duration across the engine, room creation, and operational timers is strictly 12 hours (updated from legacy 24h default).
+   - Lobby duration changes propagate to all connected operatives in real time.
+8. **Classified Mission Dossier & Native Sharing:**
+   - In `DEBRIEF`, operatives can trigger `#share-mission-dossier-btn` to compile a declassified post-mission debrief including the mission outcome, faction scores, personal performance, declassified theme, unmasked moles, and invitation links to `https://playsubterfuge.com/room/[code]`.
+   - Utilizes native OS sharing (`navigator.share`) on mobile devices with automatic fallback to clipboard copy (`navigator.clipboard.writeText`) and a 3-second phosphor-green confirmation toast.
 
 ---
 
