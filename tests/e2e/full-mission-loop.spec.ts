@@ -205,7 +205,20 @@ test.describe("Full Mission Loop — End-to-End 6-Player Operational Loop", () =
 
       // Exactly 2 moles unmasked with traitor stamps
       await expect(op.page.locator(`[id^="mole-reveal-"]`)).toHaveCount(2);
+
+      // Share Mission Dossier action is present across all operatives
+      await expect(op.page.locator("#share-mission-dossier-btn")).toBeVisible();
+      await expect(op.page.locator("#share-mission-dossier-btn")).toContainText("SHARE MISSION DOSSIER");
     }
+
+    // Operative triggers Share Mission Dossier and validates clipboard
+    const hostPage = harness.sessions[0].page;
+    await hostPage.click("#share-mission-dossier-btn");
+    await expect(hostPage.locator("#share-mission-dossier-btn")).toContainText("CLASSIFIED DOSSIER COPIED!", { timeout: 8000 });
+    const copiedDossier = await hostPage.evaluate(() => navigator.clipboard.readText());
+    expect(copiedDossier).toContain(`OPERATION CODE: #${roomCode}`);
+    expect(copiedDossier).toContain("CRIMSON PACT VICTORY");
+    expect(copiedDossier).toContain(`https://playsubterfuge.com/room/${roomCode}`);
 
     await harness.sessions[0].page.screenshot({ path: path.join(screenshotsDir, "09-debrief-victory-and-scores.png") });
     await harness.sessions[0].page.screenshot({ path: path.join(screenshotsDir, "10-debrief-full-page.png"), fullPage: true });

@@ -47,10 +47,11 @@ export class GameStore {
         this.ensureFile();
       }
     } else {
+      const useLocal = process.env.USE_LOCAL_STORE === "true";
       const redisUrl = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
       const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
 
-      if (redisUrl && redisToken) {
+      if (!useLocal && redisUrl && redisToken) {
         this.redis = new Redis({
           url: redisUrl,
           token: redisToken,
@@ -70,8 +71,14 @@ export class GameStore {
       try {
         const res = await this.redis.set(lockKey, lockVal, { nx: true, px: 10000 });
         if (res === "OK") return true;
-      } catch (err) {
+      } catch (err: any) {
         console.error("[GameStore] Redis lock acquisition error", err);
+        if (err?.message?.includes("max requests limit exceeded")) {
+          console.warn("[GameStore] Upstash Redis quota exceeded. Falling back to local store engine.");
+          this.redis = null;
+          this.ensureFile();
+          return true;
+        }
         return false;
       }
       await new Promise((r) => setTimeout(r, 40));
@@ -171,8 +178,13 @@ export class GameStore {
           if (!data.challenges) data.challenges = {};
           return data;
         }
-      } catch (err) {
-        console.error("[GameStore] Redis load error, falling back to empty store", err);
+      } catch (err: any) {
+        console.error("[GameStore] Redis load error, falling back to local file store", err);
+        if (err?.message?.includes("max requests limit exceeded")) {
+          this.redis = null;
+          this.ensureFile();
+          return this.load();
+        }
       }
       return { rooms: {}, sessions: {}, messages: {}, moleVerifications: {}, challenges: {} };
     }
@@ -196,8 +208,14 @@ export class GameStore {
     if (this.redis) {
       try {
         await this.redis.set("subterfuge:store", data, { ex: 172800 });
-      } catch (err) {
+        return;
+      } catch (err: any) {
         console.error("[GameStore] Redis save error", err);
+        if (err?.message?.includes("max requests limit exceeded")) {
+          this.redis = null;
+          this.ensureFile();
+          return this.save(data);
+        }
       }
       return;
     }

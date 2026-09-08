@@ -32,7 +32,9 @@ export class SixPlayerHarness {
 
     this.sessions = [];
     for (let i = 0; i < 6; i++) {
-      const context = await this.browser.newContext();
+      const context = await this.browser.newContext({
+        permissions: ["clipboard-read", "clipboard-write"],
+      });
       const page = await context.newPage();
       page.on("pageerror", (err) => {
         console.error(`[Browser ${i} ${callsigns[i]} PageError]`, err);
