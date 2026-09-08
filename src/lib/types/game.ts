@@ -126,6 +126,9 @@ export interface Room {
   code: string;
   hostId: string;
   phase: GamePhase;
+  /**
+   * Total mission duration in hours (1-24, default 12).
+   */
   durationHours: number;
   verdictDurationMinutes: number;
   selectedTheme?: string;
@@ -141,6 +144,10 @@ export interface Room {
   proposedVerdicts?: Partial<Record<TeamColor, ProposedVerdict>>;
   verdicts?: Partial<Record<TeamColor, TeamVerdict>>;
   winner?: TeamColor | "DRAW";
+}
+
+export interface UpdateRoomSettingsParams {
+  durationHours?: number;
 }
 
 export interface ClientGameState {

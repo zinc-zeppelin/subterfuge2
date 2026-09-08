@@ -21,6 +21,18 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    let parsedDuration = 12;
+    if (durationHours !== undefined) {
+      const num = Number(durationHours);
+      if (!Number.isInteger(num) || num < 1 || num > 24) {
+        return NextResponse.json(
+          { error: "INVALID_DURATION: Mission duration must be an integer between 1 and 24 hours" },
+          { status: 400 }
+        );
+      }
+      parsedDuration = num;
+    }
+
     // Extract or generate session token
     let sessionToken = req.headers.get("x-session-token");
     if (!sessionToken) {
@@ -30,7 +42,7 @@ export async function POST(req: NextRequest) {
     const { room, host } = await gameStore.createRoom({
       hostName,
       sessionToken,
-      durationHours: Number(durationHours) || 24,
+      durationHours: parsedDuration,
       verdictDurationMinutes: Number(verdictDurationMinutes) || 60,
     });
 
@@ -49,9 +61,10 @@ export async function POST(req: NextRequest) {
 
     return response;
   } catch (error: any) {
+    const status = error.message?.includes("INVALID_DURATION") ? 400 : 500;
     return NextResponse.json(
       { error: error.message || "Failed to create operation" },
-      { status: 500 }
+      { status }
     );
   }
 }

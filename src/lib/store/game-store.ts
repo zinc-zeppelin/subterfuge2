@@ -248,12 +248,21 @@ export class GameStore {
         createdAt: new Date().toISOString(),
       };
 
+      let durationHours = 12;
+      if (params.durationHours !== undefined) {
+        const parsed = Number(params.durationHours);
+        if (!Number.isInteger(parsed) || parsed < 1 || parsed > 24) {
+          throw new Error("INVALID_DURATION: Mission duration must be an integer between 1 and 24 hours");
+        }
+        durationHours = parsed;
+      }
+
       const room: Room = {
         id: roomId,
         code,
         hostId,
         phase: "LOBBY",
-        durationHours: params.durationHours || 24,
+        durationHours,
         verdictDurationMinutes: params.verdictDurationMinutes || 60,
         createdAt: new Date().toISOString(),
         players: [host],
@@ -264,6 +273,39 @@ export class GameStore {
 
       await this.save(data);
       return { room, host };
+    });
+  }
+
+  public async updateRoomSettings(
+    code: string,
+    sessionToken: string,
+    settings: { durationHours?: number }
+  ): Promise<Room> {
+    return this.withLock(async () => {
+      const data = await this.load();
+      const upperCode = code.toUpperCase();
+      const room = data.rooms[upperCode];
+      if (!room) throw new Error("Room not found");
+
+      const host = room.players.find((p) => p.id === room.hostId);
+      if (!host || host.sessionToken !== sessionToken) {
+        throw new Error("UNAUTHORIZED: Only the Operation Commander can configure mission parameters");
+      }
+
+      if (room.phase !== "LOBBY") {
+        throw new Error("INVALID_PHASE: Mission parameters can only be modified in the lobby");
+      }
+
+      if (settings.durationHours !== undefined) {
+        const hours = Number(settings.durationHours);
+        if (!Number.isInteger(hours) || hours < 1 || hours > 24) {
+          throw new Error("INVALID_DURATION: Mission duration must be an integer between 1 and 24 hours");
+        }
+        room.durationHours = hours;
+      }
+
+      await this.save(data);
+      return room;
     });
   }
 
@@ -361,7 +403,11 @@ export class GameStore {
     });
   }
 
-  public async startOperation(code: string, sessionToken: string): Promise<Room> {
+  public async startOperation(
+    code: string,
+    sessionToken: string,
+    options?: { durationHours?: number }
+  ): Promise<Room> {
     return this.withLock(async () => {
       const data = await this.load();
       const upperCode = code.toUpperCase();
@@ -375,6 +421,14 @@ export class GameStore {
 
       if (room.phase !== "LOBBY") {
         throw new Error("OPERATION_ALREADY_ACTIVE: Operation is already in progress");
+      }
+
+      if (options?.durationHours !== undefined) {
+        const hours = Number(options.durationHours);
+        if (!Number.isInteger(hours) || hours < 1 || hours > 24) {
+          throw new Error("INVALID_DURATION: Mission duration must be an integer between 1 and 24 hours");
+        }
+        room.durationHours = hours;
       }
 
       const n = room.players.length;
@@ -451,7 +505,7 @@ export class GameStore {
       // 3. Operational Timers
       const now = new Date();
       room.startTime = now.toISOString();
-      const durationMs = (room.durationHours || 24) * 60 * 60 * 1000;
+      const durationMs = (room.durationHours || 12) * 60 * 60 * 1000;
       room.midpointTime = new Date(now.getTime() + durationMs / 2).toISOString();
       room.endTime = new Date(now.getTime() + durationMs).toISOString();
       room.phase = "INFILTRATION";
@@ -955,7 +1009,7 @@ export class GameStore {
       }
 
       const now = new Date();
-      const durationMs = (room.durationHours || 24) * 60 * 60 * 1000;
+      const durationMs = (room.durationHours || 12) * 60 * 60 * 1000;
 
       if (params.target === "MIDPOINT") {
         room.startTime = new Date(now.getTime() - durationMs / 2 - 2000).toISOString();

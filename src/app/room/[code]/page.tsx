@@ -133,6 +133,7 @@ export default function RoomPage() {
   const [spoofWord, setSpoofWord] = useState<string>("");
   const [isSpoofModalOpen, setIsSpoofModalOpen] = useState(false);
   const [spoofModalInput, setSpoofModalInput] = useState("");
+  const [isUpdatingSettings, setIsUpdatingSettings] = useState(false);
 
   const decryptTimerRef = useRef<NodeJS.Timeout | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
@@ -907,6 +908,36 @@ export default function RoomPage() {
     }
   };
 
+  const handleUpdateDuration = async (hours: number) => {
+    if (!gameState || !code || isUpdatingSettings) return;
+    const clamped = Math.max(1, Math.min(24, Math.round(hours)));
+
+    setGameState((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        room: {
+          ...prev.room,
+          durationHours: clamped,
+        },
+      };
+    });
+
+    try {
+      setIsUpdatingSettings(true);
+      await authFetch(`/api/rooms/${code}/settings`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ durationHours: clamped }),
+      });
+      await fetchState();
+    } catch (err: any) {
+      console.error("[Lobby] Failed to update duration setting", err);
+    } finally {
+      setIsUpdatingSettings(false);
+    }
+  };
+
   const handleStartOperation = async () => {
     if (!gameState || !code || isStartingOperation) return;
     setIsStartingOperation(true);
@@ -914,6 +945,7 @@ export default function RoomPage() {
       const res = await authFetch(`/api/rooms/${code}/start`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ durationHours: gameState.room.durationHours }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to authorize deployment");
@@ -1964,7 +1996,7 @@ export default function RoomPage() {
               <span>OPERATIVES: <strong className="text-white">{players.length}</strong></span>
             </div>
 
-            <div className="hidden sm:flex items-center gap-1 text-gray-400">
+            <div id="lobby-header-duration" className="flex items-center gap-1 text-gray-400">
               <Clock className="w-3.5 h-3.5 text-gray-500 shrink-0" />
               <span>DURATION: <strong className="text-white">{room.durationHours}H</strong></span>
             </div>
@@ -2198,6 +2230,85 @@ export default function RoomPage() {
                 >
                   {self.isReady ? "CANCEL READY STATUS" : "DECLARE OPERATIONAL READY"}
                 </button>
+
+                {self.isHost && (
+                  <div
+                    id="host-duration-config-card"
+                    className="p-3 bg-carbon-950/70 border border-carbon-800 rounded space-y-2 font-mono text-xs"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 text-gray-400">
+                        <Clock className="w-3.5 h-3.5 text-classified-amber shrink-0" />
+                        <span className="font-bold uppercase tracking-wider text-white">MISSION TIMELOCK</span>
+                      </div>
+                      <span id="lobby-duration-display" className="text-classified-amber font-bold font-mono">
+                        {room.durationHours} {room.durationHours === 1 ? "HOUR" : "HOURS"}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        id="lobby-duration-minus-btn"
+                        type="button"
+                        onClick={() => handleUpdateDuration(Math.max(1, (room.durationHours || 12) - 1))}
+                        disabled={isUpdatingSettings || (room.durationHours || 12) <= 1}
+                        className="w-8 h-8 flex items-center justify-center bg-carbon-800 hover:bg-carbon-700 disabled:opacity-30 text-gray-200 rounded border border-carbon-700 text-xs font-bold transition-colors cursor-pointer"
+                        title="Decrease duration by 1 hour"
+                      >
+                        -
+                      </button>
+                      <input
+                        id="lobby-duration-slider"
+                        type="range"
+                        min="1"
+                        max="24"
+                        value={room.durationHours || 12}
+                        onChange={(e) => handleUpdateDuration(Number(e.target.value))}
+                        disabled={isUpdatingSettings}
+                        className="flex-1 accent-amber-500 cursor-pointer h-1.5 bg-carbon-900 rounded"
+                      />
+                      <button
+                        id="lobby-duration-plus-btn"
+                        type="button"
+                        onClick={() => handleUpdateDuration(Math.min(24, (room.durationHours || 12) + 1))}
+                        disabled={isUpdatingSettings || (room.durationHours || 12) >= 24}
+                        className="w-8 h-8 flex items-center justify-center bg-carbon-800 hover:bg-carbon-700 disabled:opacity-30 text-gray-200 rounded border border-carbon-700 text-xs font-bold transition-colors cursor-pointer"
+                        title="Increase duration by 1 hour"
+                      >
+                        +
+                      </button>
+                    </div>
+                    <div className="flex justify-between text-[10px] text-gray-500 font-mono">
+                      {[2, 6, 12, 24].map((h) => (
+                        <button
+                          key={h}
+                          type="button"
+                          id={`lobby-duration-preset-${h}h`}
+                          onClick={() => handleUpdateDuration(h)}
+                          disabled={isUpdatingSettings}
+                          className={`hover:text-amber-400 transition-colors cursor-pointer ${
+                            (room.durationHours || 12) === h
+                              ? "text-classified-amber font-bold underline decoration-classified-amber"
+                              : ""
+                          }`}
+                        >
+                          {h}H{h === 12 ? " (DEF)" : ""}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {!self.isHost && (
+                  <div
+                    id="operative-duration-display-card"
+                    className="p-2.5 bg-carbon-950/60 border border-carbon-800 rounded flex items-center justify-between text-micro text-gray-400 font-mono"
+                  >
+                    <span className="uppercase tracking-wider">ESTIMATED MISSION TIMELOCK:</span>
+                    <span id="operative-duration-value" className="text-white font-bold font-mono">
+                      {room.durationHours} {room.durationHours === 1 ? "HOUR" : "HOURS"}
+                    </span>
+                  </div>
+                )}
 
                 {self.isHost && (
                   <button
