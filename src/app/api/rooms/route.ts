@@ -23,14 +23,13 @@ export async function POST(req: NextRequest) {
 
     let parsedDuration = 12;
     if (durationHours !== undefined) {
-      const num = Number(durationHours);
-      if (!Number.isInteger(num) || num < 1 || num > 24) {
+      if (typeof durationHours !== "number" || !Number.isInteger(durationHours) || durationHours < 1 || durationHours > 24) {
         return NextResponse.json(
           { error: "INVALID_DURATION: Mission duration must be an integer between 1 and 24 hours" },
           { status: 400 }
         );
       }
-      parsedDuration = num;
+      parsedDuration = durationHours;
     }
 
     // Extract or generate session token

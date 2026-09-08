@@ -37,8 +37,7 @@ async function handleUpdateSettings(
 
     const { durationHours } = body;
     if (durationHours !== undefined) {
-      const parsed = Number(durationHours);
-      if (!Number.isInteger(parsed) || parsed < 1 || parsed > 24) {
+      if (typeof durationHours !== "number" || !Number.isInteger(durationHours) || durationHours < 1 || durationHours > 24) {
         return NextResponse.json(
           { error: "INVALID_DURATION: Mission duration must be an integer between 1 and 24 hours" },
           { status: 400 }
@@ -47,7 +46,7 @@ async function handleUpdateSettings(
     }
 
     const room = await gameStore.updateRoomSettings(code, sessionToken, {
-      durationHours: durationHours !== undefined ? Number(durationHours) : undefined,
+      durationHours: durationHours !== undefined ? durationHours : undefined,
     });
 
     return NextResponse.json({

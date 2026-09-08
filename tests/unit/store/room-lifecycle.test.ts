@@ -82,6 +82,23 @@ describe("Room Lifecycle, Lobby Management & Session Persistence", () => {
           durationHours: 5.5,
         })
       ).rejects.toThrow("INVALID_DURATION");
+
+      // Regression: reject non-numeric values (boolean, array)
+      await expect(
+        ctx.store.createRoom({
+          hostName: "Host",
+          sessionToken: "token-host",
+          durationHours: true as any,
+        })
+      ).rejects.toThrow("INVALID_DURATION");
+
+      await expect(
+        ctx.store.createRoom({
+          hostName: "Host",
+          sessionToken: "token-host",
+          durationHours: [8] as any,
+        })
+      ).rejects.toThrow("INVALID_DURATION");
     });
 
     it("updates room duration settings by host in lobby", async () => {
@@ -131,6 +148,15 @@ describe("Room Lifecycle, Lobby Management & Session Persistence", () => {
 
       await expect(
         ctx.store.updateRoomSettings(room.code, "host-tok", { durationHours: 25 })
+      ).rejects.toThrow("INVALID_DURATION");
+
+      // Regression: reject non-numeric values (boolean, array)
+      await expect(
+        ctx.store.updateRoomSettings(room.code, "host-tok", { durationHours: true as any })
+      ).rejects.toThrow("INVALID_DURATION");
+
+      await expect(
+        ctx.store.updateRoomSettings(room.code, "host-tok", { durationHours: [8] as any })
       ).rejects.toThrow("INVALID_DURATION");
     });
 

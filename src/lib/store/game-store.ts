@@ -250,11 +250,11 @@ export class GameStore {
 
       let durationHours = 12;
       if (params.durationHours !== undefined) {
-        const parsed = Number(params.durationHours);
-        if (!Number.isInteger(parsed) || parsed < 1 || parsed > 24) {
+        const d = params.durationHours;
+        if (typeof d !== "number" || !Number.isInteger(d) || d < 1 || d > 24) {
           throw new Error("INVALID_DURATION: Mission duration must be an integer between 1 and 24 hours");
         }
-        durationHours = parsed;
+        durationHours = d;
       }
 
       const room: Room = {
@@ -297,8 +297,8 @@ export class GameStore {
       }
 
       if (settings.durationHours !== undefined) {
-        const hours = Number(settings.durationHours);
-        if (!Number.isInteger(hours) || hours < 1 || hours > 24) {
+        const hours = settings.durationHours;
+        if (typeof hours !== "number" || !Number.isInteger(hours) || hours < 1 || hours > 24) {
           throw new Error("INVALID_DURATION: Mission duration must be an integer between 1 and 24 hours");
         }
         room.durationHours = hours;
@@ -424,8 +424,8 @@ export class GameStore {
       }
 
       if (options?.durationHours !== undefined) {
-        const hours = Number(options.durationHours);
-        if (!Number.isInteger(hours) || hours < 1 || hours > 24) {
+        const hours = options.durationHours;
+        if (typeof hours !== "number" || !Number.isInteger(hours) || hours < 1 || hours > 24) {
           throw new Error("INVALID_DURATION: Mission duration must be an integer between 1 and 24 hours");
         }
         room.durationHours = hours;

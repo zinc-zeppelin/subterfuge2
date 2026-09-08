@@ -22,14 +22,14 @@ export async function POST(
     try {
       const body = await req.json();
       if (body && body.durationHours !== undefined) {
-        const parsed = Number(body.durationHours);
-        if (!Number.isInteger(parsed) || parsed < 1 || parsed > 24) {
+        const d = body.durationHours;
+        if (typeof d !== "number" || !Number.isInteger(d) || d < 1 || d > 24) {
           return NextResponse.json(
             { error: "INVALID_DURATION: Mission duration must be an integer between 1 and 24 hours" },
             { status: 400 }
           );
         }
-        durationHours = parsed;
+        durationHours = d;
       }
     } catch {
       // Empty or non-JSON body is valid

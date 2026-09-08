@@ -911,6 +911,7 @@ export default function RoomPage() {
   const handleUpdateDuration = async (hours: number) => {
     if (!gameState || !code || isUpdatingSettings) return;
     const clamped = Math.max(1, Math.min(24, Math.round(hours)));
+    const previousDuration = gameState.room.durationHours ?? 12;
 
     setGameState((prev) => {
       if (!prev) return prev;
@@ -933,6 +934,16 @@ export default function RoomPage() {
       await fetchState();
     } catch (err: any) {
       console.error("[Lobby] Failed to update duration setting", err);
+      setGameState((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          room: {
+            ...prev.room,
+            durationHours: previousDuration,
+          },
+        };
+      });
     } finally {
       setIsUpdatingSettings(false);
     }

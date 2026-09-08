@@ -107,6 +107,21 @@ describe("API Route HTTP Contracts & Input Validation (Unit)", () => {
       });
       const resHigh = await createRoomHandler(reqHigh);
       expect(resHigh.status).toBe(400);
+
+      // Regression: reject non-numeric values (boolean, array)
+      const reqBool = new NextRequest("http://localhost:3000/api/rooms", {
+        method: "POST",
+        body: JSON.stringify({ hostName: "Commander", durationHours: true }),
+      });
+      const resBool = await createRoomHandler(reqBool);
+      expect(resBool.status).toBe(400);
+
+      const reqArr = new NextRequest("http://localhost:3000/api/rooms", {
+        method: "POST",
+        body: JSON.stringify({ hostName: "Commander", durationHours: [8] }),
+      });
+      const resArr = await createRoomHandler(reqArr);
+      expect(resArr.status).toBe(400);
     });
   });
 
@@ -158,6 +173,23 @@ describe("API Route HTTP Contracts & Input Validation (Unit)", () => {
       });
       const res = await settingsHandler(req, { params: Promise.resolve({ code: room.code }) });
       expect(res.status).toBe(400);
+
+      // Regression: reject non-numeric values (boolean, array)
+      const reqBool = new NextRequest(`http://localhost:3000/api/rooms/${room.code}/settings`, {
+        method: "PATCH",
+        headers: { "x-session-token": "host-tok" },
+        body: JSON.stringify({ durationHours: true }),
+      });
+      const resBool = await settingsHandler(reqBool, { params: Promise.resolve({ code: room.code }) });
+      expect(resBool.status).toBe(400);
+
+      const reqArr = new NextRequest(`http://localhost:3000/api/rooms/${room.code}/settings`, {
+        method: "PATCH",
+        headers: { "x-session-token": "host-tok" },
+        body: JSON.stringify({ durationHours: [8] }),
+      });
+      const resArr = await settingsHandler(reqArr, { params: Promise.resolve({ code: room.code }) });
+      expect(resArr.status).toBe(400);
     });
 
     it("successfully updates duration setting for host with 200", async () => {
