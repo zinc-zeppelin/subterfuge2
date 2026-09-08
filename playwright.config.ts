@@ -14,12 +14,13 @@ export default defineConfig({
     trace: "on-first-retry",
   },
   webServer: {
-    command: "ALLOW_DEV_MUTATORS=true npm run start",
+    command: "USE_LOCAL_STORE=true ALLOW_DEV_MUTATORS=true npm run start",
     url: "http://localhost:3000",
     reuseExistingServer: false,
     timeout: 120000,
     env: {
       ALLOW_DEV_MUTATORS: "true",
+      USE_LOCAL_STORE: "true",
     },
   },
   projects: [

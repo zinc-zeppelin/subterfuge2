@@ -34,7 +34,9 @@ import {
   KeyRound,
   Bell,
   Pencil,
+  Share2,
 } from "lucide-react";
+import { generateMissionDossierText } from "@/lib/utils/dossier";
 
 export default function RoomPage() {
   const params = useParams();
@@ -91,6 +93,7 @@ export default function RoomPage() {
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedPersonalLink, setCopiedPersonalLink] = useState(false);
+  const [dossierCopied, setDossierCopied] = useState(false);
 
   // Mid-Game Recovery Portal State
   const [recoveryTokenInput, setRecoveryTokenInput] = useState("");
@@ -1321,6 +1324,58 @@ export default function RoomPage() {
     }
   };
 
+  const handleShareDossier = async () => {
+    if (!gameState || typeof window === "undefined") return;
+    const { room, players, self, allVerdicts } = gameState;
+    const unmaskedMoles = players
+      .filter((p) => p.role === "MOLE")
+      .map((m) => ({
+        displayName: m.displayName,
+        apparentTeam: m.apparentTeam || "RED",
+        actualTeam: m.actualTeam || m.apparentTeam || "RED",
+      }));
+
+    const dossierText = generateMissionDossierText({
+      roomCode: room.code,
+      winner: room.winner,
+      declassifiedTheme: room.declassifiedTheme,
+      operativeName: self.displayName,
+      apparentTeam: self.apparentTeam || "RED",
+      actualTeam: self.actualTeam,
+      role: self.role,
+      redScore: allVerdicts?.RED?.score ?? 0,
+      blueScore: allVerdicts?.BLUE?.score ?? 0,
+      unmaskedMoles,
+      baseUrl: "https://playsubterfuge.com",
+    });
+
+    if (typeof navigator !== "undefined" && navigator.share) {
+      try {
+        await navigator.share({
+          title: `Project Subterfuge — Operation #${room.code} Debrief`,
+          text: dossierText,
+          url: `https://playsubterfuge.com/room/${room.code}`,
+        });
+        return;
+      } catch (err: any) {
+        if (err?.name === "AbortError") {
+          return;
+        }
+        console.warn("[Debrief] Native share failed, falling back to clipboard", err);
+      }
+    }
+
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      try {
+        await navigator.clipboard.writeText(dossierText);
+        setDossierCopied(true);
+        setTimeout(() => setDossierCopied(false), 3000);
+      } catch (clipErr) {
+        console.warn("[Debrief] Clipboard write failed", clipErr);
+      }
+    }
+  };
+
   const handleDecryptStart = () => {
     setIsDecrypted(true);
     if (decryptTimerRef.current) {
@@ -2339,6 +2394,33 @@ export default function RoomPage() {
                   )}
                 </div>
               </div>
+            </div>
+
+            {/* Share Classified Mission Dossier Action */}
+            <div className="mt-4 pt-3.5 border-t border-carbon-800/80 flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div className="text-xs text-gray-300 font-mono text-center sm:text-left">
+                <span className="text-white font-bold block sm:inline">Operation Debrief Complete: </span>
+                <span className="text-gray-400">Share classified mission results and expose traitors with your squad.</span>
+              </div>
+
+              <button
+                id="share-mission-dossier-btn"
+                type="button"
+                onClick={handleShareDossier}
+                className="w-full sm:w-auto min-h-[44px] px-5 py-2.5 bg-classified-amber hover:bg-amber-400 text-black font-mono font-bold text-xs uppercase tracking-wider rounded transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-lg active:scale-95 shrink-0"
+              >
+                {dossierCopied ? (
+                  <>
+                    <Check className="w-4 h-4 text-black" />
+                    <span>CLASSIFIED DOSSIER COPIED!</span>
+                  </>
+                ) : (
+                  <>
+                    <Share2 className="w-4 h-4 text-black" />
+                    <span>SHARE MISSION DOSSIER</span>
+                  </>
+                )}
+              </button>
             </div>
           </div>
 

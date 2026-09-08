@@ -47,10 +47,11 @@ export class GameStore {
         this.ensureFile();
       }
     } else {
+      const useLocal = process.env.USE_LOCAL_STORE === "true";
       const redisUrl = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
       const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
 
-      if (redisUrl && redisToken) {
+      if (!useLocal && redisUrl && redisToken) {
         this.redis = new Redis({
           url: redisUrl,
           token: redisToken,
@@ -70,7 +71,7 @@ export class GameStore {
       try {
         const res = await this.redis.set(lockKey, lockVal, { nx: true, px: 10000 });
         if (res === "OK") return true;
-      } catch (err) {
+      } catch (err: any) {
         console.error("[GameStore] Redis lock acquisition error", err);
         return false;
       }
@@ -171,8 +172,9 @@ export class GameStore {
           if (!data.challenges) data.challenges = {};
           return data;
         }
-      } catch (err) {
-        console.error("[GameStore] Redis load error, falling back to empty store", err);
+      } catch (err: any) {
+        console.error("[GameStore] Redis load error", err);
+        throw new Error(`STORAGE_UNAVAILABLE: Failed to load state from distributed store: ${err?.message || err}`);
       }
       return { rooms: {}, sessions: {}, messages: {}, moleVerifications: {}, challenges: {} };
     }
@@ -196,10 +198,11 @@ export class GameStore {
     if (this.redis) {
       try {
         await this.redis.set("subterfuge:store", data, { ex: 172800 });
-      } catch (err) {
+        return;
+      } catch (err: any) {
         console.error("[GameStore] Redis save error", err);
+        throw new Error(`STORAGE_UNAVAILABLE: Failed to persist state to distributed store: ${err?.message || err}`);
       }
-      return;
     }
 
     this.ensureFile();
