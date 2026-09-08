@@ -112,7 +112,7 @@ Before modifying game logic, agents must understand the core rules:
 6. **Rematch Loop:**
    - In `DEBRIEF`, the Host can click **"Commence Rematch // Return to Lobby"** to reset the room state, shuffle roles and codebook, and keep all players connected in the lobby.
 7. **Configurable Mission Duration (1–24 Hours, 12h Default):**
-   - The operation host can configure the duration of an espionage mission between 1 and 24 hours (inclusive, integer bounds) during room creation on the home page or dynamically in the lobby via `#host-duration-config-card` (`PATCH /api/rooms/[code]/settings`).
+   - The operation host can configure the duration of an espionage mission between 1 and 24 hours (inclusive, integer bounds) during room creation on the home page or dynamically in the lobby via `#host-duration-config-card` (`PATCH/POST /api/rooms/[code]/settings`).
    - Default mission duration across the engine, room creation, and operational timers is strictly 12 hours (updated from legacy 24h default).
    - Lobby duration changes propagate to all connected operatives in real time.
 8. **Classified Mission Dossier & Native Sharing:**

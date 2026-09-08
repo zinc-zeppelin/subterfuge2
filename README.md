@@ -82,7 +82,7 @@ Operatives can click **"SHARE MISSION DOSSIER"** to copy or share the full decla
 
 ## 3. Architecture & Tech Stack
 
-```
+```text
 subterfuge2/
 ├── src/
 │   ├── app/
@@ -175,4 +175,4 @@ If you discover a vulnerability or state leakage exploit, please open a private 
 
 ## 6. License
 
-Project Subterfuge is proprietary open-source software. All rights reserved.
+Project Subterfuge is proprietary software. All rights reserved.
