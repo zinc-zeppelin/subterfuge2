@@ -1349,30 +1349,29 @@ export default function RoomPage() {
       baseUrl: "https://playsubterfuge.com",
     });
 
-    try {
-      if (typeof navigator !== "undefined" && navigator.share) {
+    if (typeof navigator !== "undefined" && navigator.share) {
+      try {
         await navigator.share({
           title: `Project Subterfuge — Operation #${room.code} Debrief`,
           text: dossierText,
           url: `https://playsubterfuge.com/room/${room.code}`,
         });
-        setDossierCopied(true);
-        setTimeout(() => setDossierCopied(false), 3000);
-      } else if (typeof navigator !== "undefined" && navigator.clipboard) {
+        return;
+      } catch (err: any) {
+        if (err?.name === "AbortError") {
+          return;
+        }
+        console.warn("[Debrief] Native share failed, falling back to clipboard", err);
+      }
+    }
+
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      try {
         await navigator.clipboard.writeText(dossierText);
         setDossierCopied(true);
         setTimeout(() => setDossierCopied(false), 3000);
-      }
-    } catch {
-      // Fallback to clipboard if native share was dismissed or unpermitted
-      if (typeof navigator !== "undefined" && navigator.clipboard) {
-        try {
-          await navigator.clipboard.writeText(dossierText);
-          setDossierCopied(true);
-          setTimeout(() => setDossierCopied(false), 3000);
-        } catch {
-          // ignore
-        }
+      } catch (clipErr) {
+        console.warn("[Debrief] Clipboard write failed", clipErr);
       }
     }
   };

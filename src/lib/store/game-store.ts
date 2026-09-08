@@ -73,12 +73,6 @@ export class GameStore {
         if (res === "OK") return true;
       } catch (err: any) {
         console.error("[GameStore] Redis lock acquisition error", err);
-        if (err?.message?.includes("max requests limit exceeded")) {
-          console.warn("[GameStore] Upstash Redis quota exceeded. Falling back to local store engine.");
-          this.redis = null;
-          this.ensureFile();
-          return true;
-        }
         return false;
       }
       await new Promise((r) => setTimeout(r, 40));
@@ -179,12 +173,8 @@ export class GameStore {
           return data;
         }
       } catch (err: any) {
-        console.error("[GameStore] Redis load error, falling back to local file store", err);
-        if (err?.message?.includes("max requests limit exceeded")) {
-          this.redis = null;
-          this.ensureFile();
-          return this.load();
-        }
+        console.error("[GameStore] Redis load error", err);
+        throw new Error(`STORAGE_UNAVAILABLE: Failed to load state from distributed store: ${err?.message || err}`);
       }
       return { rooms: {}, sessions: {}, messages: {}, moleVerifications: {}, challenges: {} };
     }
@@ -211,13 +201,8 @@ export class GameStore {
         return;
       } catch (err: any) {
         console.error("[GameStore] Redis save error", err);
-        if (err?.message?.includes("max requests limit exceeded")) {
-          this.redis = null;
-          this.ensureFile();
-          return this.save(data);
-        }
+        throw new Error(`STORAGE_UNAVAILABLE: Failed to persist state to distributed store: ${err?.message || err}`);
       }
-      return;
     }
 
     this.ensureFile();
