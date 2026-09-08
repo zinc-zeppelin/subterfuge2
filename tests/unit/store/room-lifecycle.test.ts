@@ -36,7 +36,7 @@ describe("Room Lifecycle, Lobby Management & Session Persistence", () => {
 
       expect(room.code.length).toBe(6);
       expect(room.phase).toBe("LOBBY");
-      expect(room.durationHours).toBe(24);
+      expect(room.durationHours).toBe(12);
       expect(room.verdictDurationMinutes).toBe(60);
       expect(room.players.length).toBe(1);
 
@@ -50,12 +50,114 @@ describe("Room Lifecycle, Lobby Management & Session Persistence", () => {
       const { room } = await ctx.store.createRoom({
         hostName: "Host",
         sessionToken: "token-host",
-        durationHours: 12,
+        durationHours: 6,
         verdictDurationMinutes: 30,
       });
 
-      expect(room.durationHours).toBe(12);
+      expect(room.durationHours).toBe(6);
       expect(room.verdictDurationMinutes).toBe(30);
+    });
+
+    it("validates duration bounds (1-24 hours) during room creation", async () => {
+      await expect(
+        ctx.store.createRoom({
+          hostName: "Host",
+          sessionToken: "token-host",
+          durationHours: 0,
+        })
+      ).rejects.toThrow("INVALID_DURATION");
+
+      await expect(
+        ctx.store.createRoom({
+          hostName: "Host",
+          sessionToken: "token-host",
+          durationHours: 25,
+        })
+      ).rejects.toThrow("INVALID_DURATION");
+
+      await expect(
+        ctx.store.createRoom({
+          hostName: "Host",
+          sessionToken: "token-host",
+          durationHours: 5.5,
+        })
+      ).rejects.toThrow("INVALID_DURATION");
+
+      // Regression: reject non-numeric values (boolean, array)
+      await expect(
+        ctx.store.createRoom({
+          hostName: "Host",
+          sessionToken: "token-host",
+          durationHours: true as any,
+        })
+      ).rejects.toThrow("INVALID_DURATION");
+
+      await expect(
+        ctx.store.createRoom({
+          hostName: "Host",
+          sessionToken: "token-host",
+          durationHours: [8] as any,
+        })
+      ).rejects.toThrow("INVALID_DURATION");
+    });
+
+    it("updates room duration settings by host in lobby", async () => {
+      const { room } = await ctx.store.createRoom({
+        hostName: "Host",
+        sessionToken: "host-tok",
+      });
+      expect(room.durationHours).toBe(12);
+
+      const updated = await ctx.store.updateRoomSettings(room.code, "host-tok", {
+        durationHours: 8,
+      });
+      expect(updated.durationHours).toBe(8);
+
+      const boundMin = await ctx.store.updateRoomSettings(room.code, "host-tok", {
+        durationHours: 1,
+      });
+      expect(boundMin.durationHours).toBe(1);
+
+      const boundMax = await ctx.store.updateRoomSettings(room.code, "host-tok", {
+        durationHours: 24,
+      });
+      expect(boundMax.durationHours).toBe(24);
+    });
+
+    it("rejects invalid duration updates and non-host calls", async () => {
+      const { room } = await ctx.store.createRoom({
+        hostName: "Host",
+        sessionToken: "host-tok",
+      });
+
+      const { player: p2 } = await ctx.store.joinRoom({
+        code: room.code,
+        playerName: "Player-2",
+        sessionToken: "p2-tok",
+      });
+
+      // Non-host attempt
+      await expect(
+        ctx.store.updateRoomSettings(room.code, "p2-tok", { durationHours: 6 })
+      ).rejects.toThrow("UNAUTHORIZED");
+
+      // Invalid bounds
+      await expect(
+        ctx.store.updateRoomSettings(room.code, "host-tok", { durationHours: 0 })
+      ).rejects.toThrow("INVALID_DURATION");
+
+      await expect(
+        ctx.store.updateRoomSettings(room.code, "host-tok", { durationHours: 25 })
+      ).rejects.toThrow("INVALID_DURATION");
+
+      // Regression: reject non-numeric values (boolean, array)
+      await expect(
+        ctx.store.updateRoomSettings(room.code, "host-tok", { durationHours: true as any })
+      ).rejects.toThrow("INVALID_DURATION");
+
+      await expect(
+        ctx.store.updateRoomSettings(room.code, "host-tok", { durationHours: [8] as any })
+      ).rejects.toThrow("INVALID_DURATION");
     });
 
     it("allows operatives to join an active lobby", async () => {

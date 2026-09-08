@@ -9,6 +9,7 @@ function HomeContent() {
   const searchParams = useSearchParams();
   const [callsign, setCallsign] = useState("");
   const [roomCode, setRoomCode] = useState("");
+  const [durationHours, setDurationHours] = useState(12);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -32,7 +33,7 @@ function HomeContent() {
       const res = await fetch("/api/rooms", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ hostName: callsign }),
+        body: JSON.stringify({ hostName: callsign, durationHours }),
       });
       const data = await res.json();
       if (typeof window !== "undefined" && data.sessionToken) {
@@ -129,6 +130,76 @@ function HomeContent() {
               Host an encrypted match with your group.
             </p>
           </div>
+
+          {/* Mission Duration Selector */}
+          <div className="space-y-1.5 pt-2 border-t border-carbon-800">
+            <div className="flex items-center justify-between text-micro text-gray-400">
+              <span className="uppercase font-bold tracking-wider">MISSION DURATION:</span>
+              <span id="create-duration-display" className="text-classified-amber font-bold font-mono">
+                {durationHours} {durationHours === 1 ? "HOUR" : "HOURS"}
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <button
+                id="create-duration-minus-btn"
+                type="button"
+                onClick={() => setDurationHours((h) => Math.max(1, h - 1))}
+                className="w-8 h-8 flex items-center justify-center bg-carbon-800 hover:bg-carbon-700 text-gray-200 rounded border border-carbon-700 text-xs font-bold transition-colors cursor-pointer"
+                title="Decrease duration by 1 hour"
+              >
+                -
+              </button>
+              <input
+                id="create-duration-slider"
+                type="range"
+                min="1"
+                max="24"
+                value={durationHours}
+                onChange={(e) => setDurationHours(Number(e.target.value))}
+                className="flex-1 accent-amber-500 cursor-pointer h-1.5 bg-carbon-950 rounded"
+              />
+              <button
+                id="create-duration-plus-btn"
+                type="button"
+                onClick={() => setDurationHours((h) => Math.min(24, h + 1))}
+                className="w-8 h-8 flex items-center justify-center bg-carbon-800 hover:bg-carbon-700 text-gray-200 rounded border border-carbon-700 text-xs font-bold transition-colors cursor-pointer"
+                title="Increase duration by 1 hour"
+              >
+                +
+              </button>
+            </div>
+            <div className="flex justify-between text-[10px] text-gray-500 font-mono">
+              <button
+                type="button"
+                onClick={() => setDurationHours(2)}
+                className={`hover:text-amber-400 transition-colors cursor-pointer ${durationHours === 2 ? "text-classified-amber font-bold" : ""}`}
+              >
+                2H
+              </button>
+              <button
+                type="button"
+                onClick={() => setDurationHours(6)}
+                className={`hover:text-amber-400 transition-colors cursor-pointer ${durationHours === 6 ? "text-classified-amber font-bold" : ""}`}
+              >
+                6H
+              </button>
+              <button
+                type="button"
+                onClick={() => setDurationHours(12)}
+                className={`hover:text-amber-400 transition-colors cursor-pointer ${durationHours === 12 ? "text-classified-amber font-bold" : ""}`}
+              >
+                12H (DEF)
+              </button>
+              <button
+                type="button"
+                onClick={() => setDurationHours(24)}
+                className={`hover:text-amber-400 transition-colors cursor-pointer ${durationHours === 24 ? "text-classified-amber font-bold" : ""}`}
+              >
+                24H
+              </button>
+            </div>
+          </div>
+
           <button
             id="create-room-btn"
             onClick={handleCreateRoom}

@@ -22,6 +22,7 @@ import { POST as submitVerdictHandler } from "@/app/api/rooms/[code]/verdict/sub
 import { POST as rematchHandler } from "@/app/api/rooms/[code]/rematch/route";
 import { POST as leaveHandler } from "@/app/api/rooms/[code]/leave/route";
 import { POST as kickHandler } from "@/app/api/rooms/[code]/kick/route";
+import { PATCH as settingsHandler } from "@/app/api/rooms/[code]/settings/route";
 import { gameStore } from "@/lib/store/game-store";
 
 describe("API Route HTTP Contracts & Input Validation (Unit)", () => {
@@ -79,7 +80,7 @@ describe("API Route HTTP Contracts & Input Validation (Unit)", () => {
     it("creates room with valid parameters and sets session cookie", async () => {
       const req = new NextRequest("http://localhost:3000/api/rooms", {
         method: "POST",
-        body: JSON.stringify({ hostName: "Commander" }),
+        body: JSON.stringify({ hostName: "Commander", durationHours: 8 }),
       });
       const res = await createRoomHandler(req);
       expect(res.status).toBe(200);
@@ -87,6 +88,129 @@ describe("API Route HTTP Contracts & Input Validation (Unit)", () => {
       expect(data.roomCode).toBeDefined();
       expect(data.sessionToken).toBeDefined();
       expect(res.cookies.get("subterfuge_session")?.value).toBe(data.sessionToken);
+
+      const room = await gameStore.getRoom(data.roomCode);
+      expect(room?.durationHours).toBe(8);
+    });
+
+    it("rejects invalid durationHours with 400", async () => {
+      const reqLow = new NextRequest("http://localhost:3000/api/rooms", {
+        method: "POST",
+        body: JSON.stringify({ hostName: "Commander", durationHours: 0 }),
+      });
+      const resLow = await createRoomHandler(reqLow);
+      expect(resLow.status).toBe(400);
+
+      const reqHigh = new NextRequest("http://localhost:3000/api/rooms", {
+        method: "POST",
+        body: JSON.stringify({ hostName: "Commander", durationHours: 25 }),
+      });
+      const resHigh = await createRoomHandler(reqHigh);
+      expect(resHigh.status).toBe(400);
+
+      // Regression: reject non-numeric values (boolean, array)
+      const reqBool = new NextRequest("http://localhost:3000/api/rooms", {
+        method: "POST",
+        body: JSON.stringify({ hostName: "Commander", durationHours: true }),
+      });
+      const resBool = await createRoomHandler(reqBool);
+      expect(resBool.status).toBe(400);
+
+      const reqArr = new NextRequest("http://localhost:3000/api/rooms", {
+        method: "POST",
+        body: JSON.stringify({ hostName: "Commander", durationHours: [8] }),
+      });
+      const resArr = await createRoomHandler(reqArr);
+      expect(resArr.status).toBe(400);
+    });
+  });
+
+  describe("PATCH /api/rooms/[code]/settings", () => {
+    it("rejects without session token with 401", async () => {
+      const { room } = await gameStore.createRoom({
+        hostName: "Host",
+        sessionToken: "host-tok",
+      });
+
+      const req = new NextRequest(`http://localhost:3000/api/rooms/${room.code}/settings`, {
+        method: "PATCH",
+        body: JSON.stringify({ durationHours: 6 }),
+      });
+      const res = await settingsHandler(req, { params: Promise.resolve({ code: room.code }) });
+      expect(res.status).toBe(401);
+    });
+
+    it("rejects non-host session token with 403", async () => {
+      const { room } = await gameStore.createRoom({
+        hostName: "Host",
+        sessionToken: "host-tok",
+      });
+      await gameStore.joinRoom({
+        code: room.code,
+        playerName: "Operative-2",
+        sessionToken: "op2-tok",
+      });
+
+      const req = new NextRequest(`http://localhost:3000/api/rooms/${room.code}/settings`, {
+        method: "PATCH",
+        headers: { "x-session-token": "op2-tok" },
+        body: JSON.stringify({ durationHours: 6 }),
+      });
+      const res = await settingsHandler(req, { params: Promise.resolve({ code: room.code }) });
+      expect(res.status).toBe(403);
+    });
+
+    it("rejects invalid duration values with 400", async () => {
+      const { room } = await gameStore.createRoom({
+        hostName: "Host",
+        sessionToken: "host-tok",
+      });
+
+      const req = new NextRequest(`http://localhost:3000/api/rooms/${room.code}/settings`, {
+        method: "PATCH",
+        headers: { "x-session-token": "host-tok" },
+        body: JSON.stringify({ durationHours: 0 }),
+      });
+      const res = await settingsHandler(req, { params: Promise.resolve({ code: room.code }) });
+      expect(res.status).toBe(400);
+
+      // Regression: reject non-numeric values (boolean, array)
+      const reqBool = new NextRequest(`http://localhost:3000/api/rooms/${room.code}/settings`, {
+        method: "PATCH",
+        headers: { "x-session-token": "host-tok" },
+        body: JSON.stringify({ durationHours: true }),
+      });
+      const resBool = await settingsHandler(reqBool, { params: Promise.resolve({ code: room.code }) });
+      expect(resBool.status).toBe(400);
+
+      const reqArr = new NextRequest(`http://localhost:3000/api/rooms/${room.code}/settings`, {
+        method: "PATCH",
+        headers: { "x-session-token": "host-tok" },
+        body: JSON.stringify({ durationHours: [8] }),
+      });
+      const resArr = await settingsHandler(reqArr, { params: Promise.resolve({ code: room.code }) });
+      expect(resArr.status).toBe(400);
+    });
+
+    it("successfully updates duration setting for host with 200", async () => {
+      const { room } = await gameStore.createRoom({
+        hostName: "Host",
+        sessionToken: "host-tok",
+      });
+
+      const req = new NextRequest(`http://localhost:3000/api/rooms/${room.code}/settings`, {
+        method: "PATCH",
+        headers: { "x-session-token": "host-tok" },
+        body: JSON.stringify({ durationHours: 4 }),
+      });
+      const res = await settingsHandler(req, { params: Promise.resolve({ code: room.code }) });
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.success).toBe(true);
+      expect(data.room.durationHours).toBe(4);
+
+      const updated = await gameStore.getRoom(room.code);
+      expect(updated?.durationHours).toBe(4);
     });
   });
 

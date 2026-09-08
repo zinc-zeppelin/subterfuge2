@@ -286,4 +286,53 @@ test.describe("Lobby — Management, Validation & Security Bounds", () => {
       }
     }
   });
+
+  test("allows host to configure game duration in lobby, syncing to operatives in real time", async ({
+    browser,
+    baseURL,
+  }) => {
+    const url = baseURL || "http://localhost:3000";
+    const hostContext = await browser.newContext();
+    const opContext = await browser.newContext();
+
+    try {
+      const hostPage = await hostContext.newPage();
+      const opPage = await opContext.newPage();
+
+      // Host creates room (default 12 hours)
+      await hostPage.goto(`${url}/`);
+      await hostPage.fill("#callsign-input", "Commander-Duration");
+      await expect(hostPage.locator("#create-duration-display")).toContainText("12 HOURS");
+      await hostPage.click("#create-room-btn");
+      await hostPage.waitForURL(/\/room\/[A-Z0-9]{6}/);
+
+      const roomCode = hostPage.url().match(/\/room\/([A-Z0-9]{6})/)?.[1];
+      expect(roomCode).toBeTruthy();
+
+      // Verify host sees default 12H in lobby header and config card
+      await expect(hostPage.locator("#lobby-header-duration")).toContainText("12H");
+      await expect(hostPage.locator("#lobby-duration-display")).toContainText("12 HOURS");
+
+      // Peer operative joins
+      await opPage.goto(`${url}/room/${roomCode}`);
+      await opPage.fill("#join-callsign-input", "Operative-Observer");
+      await opPage.click("#join-room-submit-btn");
+
+      // Peer operative sees 12H in header and display card
+      await expect(opPage.locator("#lobby-header-duration")).toContainText("12H");
+      await expect(opPage.locator("#operative-duration-value")).toContainText("12 HOURS");
+
+      // Host clicks preset 6H
+      await hostPage.click("#lobby-duration-preset-6h");
+      await expect(hostPage.locator("#lobby-duration-display")).toContainText("6 HOURS");
+      await expect(hostPage.locator("#lobby-header-duration")).toContainText("6H");
+
+      // Peer operative observes updated 6H via state sync
+      await expect(opPage.locator("#lobby-header-duration")).toContainText("6H", { timeout: 10000 });
+      await expect(opPage.locator("#operative-duration-value")).toContainText("6 HOURS", { timeout: 10000 });
+    } finally {
+      await hostContext.close().catch(() => {});
+      await opContext.close().catch(() => {});
+    }
+  });
 });
