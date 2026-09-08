@@ -20,6 +20,16 @@ export interface DossierShareParams {
   baseUrl?: string;
 }
 
+/**
+ * Generates a formatted Cold War intelligence mission debriefing text for external sharing.
+ *
+ * Formats operation code, winning faction, declassified codebook theme, personal operative
+ * cover and true allegiance, final team efficiency scores, and identified embedded moles,
+ * appended with a direct recovery / joining link to the mission room.
+ *
+ * @param params - Configuration parameters including room outcome, operative identity, and scores.
+ * @returns Formatted multi-line debriefing string suitable for clipboard or native share sheet.
+ */
 export function generateMissionDossierText(params: DossierShareParams): string {
   const hostUrl = params.baseUrl || "https://playsubterfuge.com";
   const winnerText =
