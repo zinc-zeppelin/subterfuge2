@@ -35,8 +35,12 @@ import {
   Bell,
   Pencil,
   Share2,
+  Sliders,
 } from "lucide-react";
 import { generateMissionDossierText } from "@/lib/utils/dossier";
+import { SettingsModal } from "@/components/SettingsModal";
+import { soundscape } from "@/lib/utils/soundscape";
+import { initTheme } from "@/lib/utils/theme";
 
 export default function RoomPage() {
   const params = useParams();
@@ -115,8 +119,18 @@ export default function RoomPage() {
   } | null>(null);
   const [dismissedAlerts, setDismissedAlerts] = useState<Record<string, boolean>>({});
   const [notifPermission, setNotifPermission] = useState<NotificationPermission>("default");
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const prevMessagesRef = useRef<Message[]>([]);
   const hasFetchedInitialMessagesRef = useRef(false);
+  const prevThemeRef = useRef<string | null>(null);
+  const prevChallengesLengthRef = useRef<number>(0);
+  const hasNotifiedSlateRef = useRef<boolean>(false);
+  const hasInitialStateLoadedRef = useRef<boolean>(false);
+  const triggerPushNotificationRef = useRef<((title: string, options: NotificationOptions & { data?: any }) => void) | null>(null);
+
+  useEffect(() => {
+    initTheme();
+  }, []);
 
   // Dev Mode & Playtesting State
   const [isDevMode, setIsDevMode] = useState(false);
@@ -314,6 +328,52 @@ export default function RoomPage() {
         }
       }
       setIsUnauthorized(false);
+
+      // Asynchronous sound & notification triggers
+      if (!hasInitialStateLoadedRef.current) {
+        hasInitialStateLoadedRef.current = true;
+        prevThemeRef.current = data.room?.declassifiedTheme || null;
+        prevChallengesLengthRef.current = data.incomingChallenges?.length || 0;
+        hasNotifiedSlateRef.current = data.draftSlate?.confirmedCount === 2;
+      } else {
+        // Track midpoint theme reveal
+        if (data.room?.declassifiedTheme && !prevThemeRef.current) {
+          prevThemeRef.current = data.room.declassifiedTheme;
+          soundscape.playMidpointIntercept();
+          if (triggerPushNotificationRef.current) {
+            triggerPushNotificationRef.current("CENTRAL COMMAND // MIDPOINT INTERCEPT", {
+              body: `Operational theme declassified: "${data.room.declassifiedTheme.toUpperCase()}". Decode your cipher!`,
+              icon: "/icon.svg",
+            });
+          }
+        }
+
+        // Track incoming clearance challenge
+        if (data.incomingChallenges && data.incomingChallenges.length > prevChallengesLengthRef.current) {
+          prevChallengesLengthRef.current = data.incomingChallenges.length;
+          soundscape.playChallengeAlert();
+          if (triggerPushNotificationRef.current) {
+            triggerPushNotificationRef.current("SECURITY CLEARANCE CHALLENGE", {
+              body: `Operative ${data.incomingChallenges[0]?.requesterName} has issued a covert verification challenge!`,
+              icon: "/icon.svg",
+              data: { peerId: data.incomingChallenges[0]?.requesterId },
+            });
+          }
+        }
+
+        // Track team verdict proposal awaiting confirmation
+        if (data.draftSlate?.words?.length && data.draftSlate.confirmedCount === 1 && !hasNotifiedSlateRef.current) {
+          hasNotifiedSlateRef.current = true;
+          soundscape.playRadioChirp();
+          if (triggerPushNotificationRef.current) {
+            triggerPushNotificationRef.current("FINAL VERDICT DELIBERATION", {
+              body: "Official team verdict slate proposed. Second operative confirmation required to lock in!",
+              icon: "/icon.svg",
+            });
+          }
+        }
+      }
+
       // Keep session token updated across storages
       if (data.self?.sessionToken && typeof window !== "undefined") {
         sessionStorage.setItem(`subterfuge_session_${code}`, data.self.sessionToken);
@@ -335,24 +395,7 @@ export default function RoomPage() {
   selfIdRef.current = gameState?.self?.id;
 
   const playCommsChime = useCallback(() => {
-    try {
-      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-      if (!AudioCtx) return;
-      const ctx = new AudioCtx();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = "sine";
-      osc.frequency.setValueAtTime(880, ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(1320, ctx.currentTime + 0.08);
-      gain.gain.setValueAtTime(0.12, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.18);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start();
-      osc.stop(ctx.currentTime + 0.18);
-    } catch {
-      // Audio context error or blocked before user interaction
-    }
+    soundscape.playRadioChirp();
   }, []);
 
   const scrollToMessagesBottom = useCallback((smooth = false) => {
@@ -495,6 +538,7 @@ export default function RoomPage() {
     },
     [handleOpenDMWithOperative]
   );
+  triggerPushNotificationRef.current = triggerPushNotification;
 
   const fetchMessages = useCallback(async () => {
     if (!code) return;
@@ -1372,6 +1416,7 @@ export default function RoomPage() {
         const data = await res.json();
         throw new Error(data.error || "Failed to transmit verdict");
       }
+      soundscape.playStamp();
       await fetchState();
     } catch (err: any) {
       setVerdictError(err.message);
@@ -1449,6 +1494,7 @@ export default function RoomPage() {
     if (typeof navigator !== "undefined" && navigator.clipboard) {
       try {
         await navigator.clipboard.writeText(dossierText);
+        soundscape.playStamp();
         setDossierCopied(true);
         setTimeout(() => setDossierCopied(false), 3000);
       } catch (clipErr) {
@@ -1458,6 +1504,7 @@ export default function RoomPage() {
   };
 
   const handleDecryptStart = () => {
+    soundscape.playDecryptSweep();
     setIsDecrypted(true);
     if (decryptTimerRef.current) {
       clearTimeout(decryptTimerRef.current);
@@ -1477,6 +1524,7 @@ export default function RoomPage() {
     if (!gameState?.self?.assignedWord) return;
     const wordInput = briefingWordInput.trim();
     if (wordInput.toUpperCase() !== gameState.self.assignedWord.toUpperCase()) return;
+    soundscape.playStamp();
     if (typeof window !== "undefined" && code && gameState.self.id) {
       sessionStorage.setItem(`subterfuge_briefing_burned_${code}_${gameState.self.id}`, "true");
     }
@@ -1946,6 +1994,19 @@ export default function RoomPage() {
 
           {/* Action Tools */}
           <div className="flex items-center gap-1.5 text-micro">
+            <button
+              id="settings-toggle-btn"
+              onClick={() => {
+                soundscape.playClick();
+                setIsSettingsOpen(true);
+              }}
+              className="min-h-[44px] px-3 py-1.5 bg-carbon-900 hover:bg-carbon-850 border border-carbon-700 hover:border-classified-amber text-gray-300 hover:text-white rounded text-micro font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer"
+              title="Station Settings (Audio, Theme, Notifications)"
+            >
+              <Sliders className="w-3.5 h-3.5 text-classified-amber" />
+              <span>CONFIG</span>
+            </button>
+
             <button
               id="field-manual-btn"
               onClick={handleOpenManual}
@@ -4610,6 +4671,8 @@ export default function RoomPage() {
           </div>
         </aside>
       )}
+
+      <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
     </div>
   );
 }

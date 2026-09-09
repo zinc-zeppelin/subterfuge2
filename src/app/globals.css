@@ -108,3 +108,92 @@ html {
 .animate-shrink-width {
   animation: shrinkWidth 3s linear forwards;
 }
+
+/* ==========================================================================
+   Classified Manila Paper / Typewriter Ink Light Theme
+   ========================================================================== */
+html.theme-manila {
+  color-scheme: light;
+}
+
+html.theme-manila body {
+  background-color: #f3efe6 !important;
+  color: #1c1917 !important;
+  background-image: radial-gradient(#d6cbba 0.75px, transparent 0.75px);
+  background-size: 16px 16px;
+}
+
+/* Manila Paper Document Panels & Cards */
+html.theme-manila .bg-carbon-950,
+html.theme-manila .bg-carbon-900,
+html.theme-manila .bg-carbon-850,
+html.theme-manila .classified-plate {
+  background-color: #faf7f2 !important;
+  border-color: #d6ccba !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.03) !important;
+}
+
+html.theme-manila .bg-carbon-800 {
+  background-color: #ede5d8 !important;
+  border-color: #d6ccba !important;
+}
+
+html.theme-manila .bg-carbon-700 {
+  background-color: #e2d7c5 !important;
+  border-color: #c9bcab !important;
+}
+
+/* Typography Overrides for Manila High-Contrast Ink */
+html.theme-manila .text-gray-100,
+html.theme-manila .text-gray-200,
+html.theme-manila .text-gray-300,
+html.theme-manila .text-white {
+  color: #1c1917 !important;
+}
+
+html.theme-manila .text-gray-400,
+html.theme-manila .text-gray-500 {
+  color: #57534e !important;
+}
+
+html.theme-manila .text-gray-600 {
+  color: #78716c !important;
+}
+
+/* Border Overrides */
+html.theme-manila .border-carbon-800,
+html.theme-manila .border-carbon-700,
+html.theme-manila .border-carbon-600 {
+  border-color: #d6ccba !important;
+}
+
+/* Classified Microfilm Redacted Blockout */
+html.theme-manila .redacted-bar {
+  background-color: #1c1917 !important;
+  color: transparent !important;
+  box-shadow: inset 0 0 2px rgba(0, 0, 0, 0.4) !important;
+}
+
+/* Authentic Red Classified Stamp on Parchment */
+html.theme-manila .classified-stamp {
+  border-color: #991b1b !important;
+  color: #991b1b !important;
+  background-color: rgba(153, 27, 27, 0.04) !important;
+}
+
+/* High-Contrast Accents for Manila Mode */
+html.theme-manila .text-classified-terminal {
+  color: #15803d !important;
+}
+
+html.theme-manila .text-classified-amber {
+  color: #b45309 !important;
+}
+
+html.theme-manila .text-classified-crimson {
+  color: #991b1b !important;
+}
+
+html.theme-manila .crt-overlay {
+  display: none !important;
+}

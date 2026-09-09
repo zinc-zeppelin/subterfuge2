@@ -41,7 +41,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className="dark h-full">
+    <html lang="en" className="dark h-full" suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `try{if(localStorage.getItem('subterfuge_theme')==='manila'){document.documentElement.classList.remove('dark');document.documentElement.classList.add('theme-manila');}}catch(e){}`,
+          }}
+        />
+      </head>
       <body className="bg-carbon-950 text-gray-200 min-h-[100dvh] overscroll-none selection:bg-classified-amber selection:text-black">
         <div className="relative min-h-[100dvh] flex flex-col">
           <main className="flex-1 flex flex-col px-2 sm:px-4 max-w-7xl mx-auto w-full overflow-x-hidden">{children}</main>

@@ -2,7 +2,10 @@
 
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ShieldAlert, Terminal, KeyRound, Radio } from "lucide-react";
+import { ShieldAlert, Terminal, KeyRound, Radio, Sliders } from "lucide-react";
+import { SettingsModal } from "@/components/SettingsModal";
+import { soundscape } from "@/lib/utils/soundscape";
+import { initTheme } from "@/lib/utils/theme";
 
 function HomeContent() {
   const router = useRouter();
@@ -12,6 +15,11 @@ function HomeContent() {
   const [durationHours, setDurationHours] = useState(12);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
+  useEffect(() => {
+    initTheme();
+  }, []);
 
   useEffect(() => {
     const joinCode = searchParams.get("joinCode");
@@ -83,6 +91,22 @@ function HomeContent() {
 
   return (
     <div className="flex-1 flex flex-col items-center justify-center p-4 max-w-xl mx-auto w-full font-mono">
+      {/* Top Station Utilities */}
+      <div className="w-full flex justify-end mb-2">
+        <button
+          id="settings-toggle-btn"
+          onClick={() => {
+            soundscape.playClick();
+            setIsSettingsOpen(true);
+          }}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-carbon-900 border border-carbon-700 hover:border-carbon-600 text-gray-300 hover:text-white font-mono text-xs rounded transition shadow-sm"
+          aria-label="Operational Settings"
+        >
+          <Sliders className="w-3.5 h-3.5 text-classified-amber" />
+          <span className="tracking-wider uppercase text-[11px]">CONFIG // SETTINGS</span>
+        </button>
+      </div>
+
       {/* Header */}
       <div className="text-center mb-8 space-y-2">
         <h1 className="text-3xl sm:text-4xl font-black tracking-widest text-white flex items-center justify-center gap-2.5">
@@ -236,6 +260,8 @@ function HomeContent() {
           </button>
         </div>
       </div>
+
+      <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
     </div>
   );
 }

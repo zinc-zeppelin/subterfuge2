@@ -223,4 +223,61 @@ test.describe("Ergonomics — Playtest Polish, Anti-Shoulder-Surfing & Dev HUD",
     await molePage.keyboard.press("Escape");
     await expect(molePage.locator("#spoof-word-modal")).toBeHidden({ timeout: 5000 });
   });
+
+  test("verifies settings menu with audio soundscape toggle, preview sounds, manila light theme, and escape dismissal", async ({ browser, baseURL }) => {
+    test.setTimeout(60000);
+    const url = baseURL || "http://localhost:3000";
+    const context = await browser.newContext();
+    const page = await context.newPage();
+
+    try {
+      await page.goto(url);
+
+      // 1. Open Settings modal from Home Page header
+      const settingsBtn = page.locator("#settings-toggle-btn");
+      await expect(settingsBtn).toBeVisible({ timeout: 5000 });
+      await settingsBtn.click();
+
+      const modal = page.locator("#settings-modal-card");
+      await expect(modal).toBeVisible({ timeout: 5000 });
+
+      // 2. Test Audio Soundscape toggle
+      const audioStatusBadge = page.locator("#audio-status-badge");
+      await expect(audioStatusBadge).toContainText("AUDIO ACTIVE");
+
+      const toggleAudioBtn = page.locator("#toggle-audio-btn");
+      await toggleAudioBtn.click();
+      await expect(audioStatusBadge).toContainText("MUTED");
+
+      await toggleAudioBtn.click();
+      await expect(audioStatusBadge).toContainText("AUDIO ACTIVE");
+
+      // Verify sound preview buttons are visible
+      await expect(page.locator("#preview-teletype-btn")).toBeVisible();
+      await expect(page.locator("#preview-radio-btn")).toBeVisible();
+      await page.click("#preview-teletype-btn");
+      await page.click("#preview-radio-btn");
+
+      // 3. Test Visual Theme Toggle (Manila Light vs CRT Dark)
+      const themeManilaBtn = page.locator("#theme-manila-btn");
+      await themeManilaBtn.click();
+
+      // Verify html tag receives theme-manila class
+      await expect(page.locator("html")).toHaveClass(/theme-manila/);
+      await expect(page.locator("#theme-status-badge")).toContainText("MANILA PAPER");
+
+      // Switch back to CRT Dark
+      const themeDarkBtn = page.locator("#theme-dark-btn");
+      await themeDarkBtn.click();
+      await expect(page.locator("html")).toHaveClass(/dark/);
+      await expect(page.locator("#theme-status-badge")).toContainText("CRT TERMINAL");
+
+      // 4. Test Escape key dismissal
+      await page.keyboard.press("Escape");
+      await expect(modal).toBeHidden({ timeout: 5000 });
+    } finally {
+      await context.close();
+    }
+  });
 });
+
