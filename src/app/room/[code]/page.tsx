@@ -41,6 +41,7 @@ import { generateMissionDossierText } from "@/lib/utils/dossier";
 import { SettingsModal } from "@/components/SettingsModal";
 import { soundscape } from "@/lib/utils/soundscape";
 import { initTheme } from "@/lib/utils/theme";
+import { dispatchCovertNotification } from "@/lib/utils/notifications";
 
 export default function RoomPage() {
   const params = useParams();
@@ -459,84 +460,9 @@ export default function RoomPage() {
 
   const triggerPushNotification = useCallback(
     (title: string, options: NotificationOptions & { data?: any }) => {
-      if (typeof window === "undefined" || !("Notification" in window)) return;
-      if (Notification.permission !== "granted") return;
-
-      // Try Service Worker registration first (mandatory for mobile Safari & Android Chrome)
-      const reg = swRegistrationRef.current;
-      if (reg && reg.showNotification) {
-        reg.showNotification(title, options).catch(() => {
-          try {
-            const notif = new Notification(title, options);
-            notif.onclick = () => {
-              window.focus();
-              if (options.data?.peerId) handleOpenDMWithOperative(options.data.peerId);
-              notif.close();
-            };
-          } catch {
-            // fallback
-          }
-        });
-        return;
-      }
-
-      if ("serviceWorker" in navigator) {
-        navigator.serviceWorker
-          .getRegistration()
-          .then((activeReg) => {
-            if (activeReg && activeReg.showNotification) {
-              swRegistrationRef.current = activeReg;
-              activeReg.showNotification(title, options).catch(() => {
-                try {
-                  const notif = new Notification(title, options);
-                  notif.onclick = () => {
-                    window.focus();
-                    if (options.data?.peerId) handleOpenDMWithOperative(options.data.peerId);
-                    notif.close();
-                  };
-                } catch {
-                  // fallback
-                }
-              });
-            } else {
-              try {
-                const notif = new Notification(title, options);
-                notif.onclick = () => {
-                  window.focus();
-                  if (options.data?.peerId) handleOpenDMWithOperative(options.data.peerId);
-                  notif.close();
-                };
-              } catch {
-                // fallback
-              }
-            }
-          })
-          .catch(() => {
-            try {
-              const notif = new Notification(title, options);
-              notif.onclick = () => {
-                window.focus();
-                if (options.data?.peerId) handleOpenDMWithOperative(options.data.peerId);
-                notif.close();
-              };
-            } catch {
-              // fallback
-            }
-          });
-      } else {
-        try {
-          const notif = new Notification(title, options);
-          notif.onclick = () => {
-            window.focus();
-            if (options.data?.peerId) handleOpenDMWithOperative(options.data.peerId);
-            notif.close();
-          };
-        } catch {
-          // fallback
-        }
-      }
+      dispatchCovertNotification(title, options).catch(() => {});
     },
-    [handleOpenDMWithOperative]
+    []
   );
   triggerPushNotificationRef.current = triggerPushNotification;
 
@@ -789,7 +715,19 @@ export default function RoomPage() {
   }, [hasGameSession, fetchState, fetchMessages, currentPhase]);
 
   useEffect(() => {
-    if (typeof window !== "undefined" && "serviceWorker" in navigator) {
+    if (typeof window === "undefined") return;
+
+    const handleCommMessage = (event: MessageEvent) => {
+      // Validate origin if coming from window postMessage
+      if (event.origin && event.origin !== window.location.origin) return;
+      if (event.data?.type === "OPEN_COMMUNICATION" && event.data?.peerId) {
+        handleOpenDMWithOperative(event.data.peerId);
+      }
+    };
+
+    window.addEventListener("message", handleCommMessage);
+
+    if ("serviceWorker" in navigator) {
       navigator.serviceWorker
         .register("/sw.js")
         .then((reg) => {
@@ -797,16 +735,15 @@ export default function RoomPage() {
         })
         .catch(() => {});
 
-      const handleSwMessage = (event: MessageEvent) => {
-        if (event.data?.type === "OPEN_COMMUNICATION" && event.data?.peerId) {
-          handleOpenDMWithOperative(event.data.peerId);
-        }
-      };
-      navigator.serviceWorker.addEventListener("message", handleSwMessage);
-      return () => {
-        navigator.serviceWorker.removeEventListener("message", handleSwMessage);
-      };
+      navigator.serviceWorker.addEventListener("message", handleCommMessage);
     }
+
+    return () => {
+      window.removeEventListener("message", handleCommMessage);
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.removeEventListener("message", handleCommMessage);
+      }
+    };
   }, [handleOpenDMWithOperative]);
 
   // Auto-scroll comms message list to bottom on new transmissions or channel switch
