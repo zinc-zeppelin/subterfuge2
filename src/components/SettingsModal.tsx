@@ -109,19 +109,22 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   return (
     <div
       id="settings-modal-backdrop"
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm animate-fadeIn"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-sm animate-fadeIn"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
       <div
         id="settings-modal-card"
-        className="w-full max-w-lg bg-carbon-900 border-2 border-carbon-700 rounded-lg shadow-2xl p-4 sm:p-6 space-y-6 relative max-h-[90vh] overflow-y-auto"
+        className="w-full max-w-lg bg-carbon-900 border-t-2 sm:border-2 border-carbon-700 rounded-t-2xl sm:rounded-lg shadow-2xl p-4 sm:p-6 space-y-4 sm:space-y-5 relative max-h-[88vh] sm:max-h-[90vh] overflow-y-auto"
       >
+        {/* Mobile Drag Handle */}
+        <div className="w-12 h-1 bg-carbon-700 rounded-full mx-auto -mt-1 mb-2 sm:hidden" />
+
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-carbon-700 pb-3">
+        <div className="flex items-center justify-between border-b border-carbon-700 pb-2.5">
           <div className="flex items-center gap-2">
-            <Sliders className="w-5 h-5 text-classified-amber" />
+            <Sliders className="w-4 h-4 sm:w-5 sm:h-5 text-classified-amber" />
             <span className="font-mono text-xs sm:text-sm font-bold tracking-widest uppercase text-classified-amber">
               STATION CONFIG // PREFERENCES
             </span>
@@ -132,7 +135,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             className="p-1 text-gray-400 hover:text-white rounded border border-carbon-700 hover:border-carbon-600 transition"
             aria-label="Close settings"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4 sm:w-5 sm:h-5" />
           </button>
         </div>
 
@@ -144,7 +147,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         )}
 
         {/* Section 1: Audio Immersion */}
-        <div className="space-y-3">
+        <div className="space-y-2.5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               {audioEnabled ? (
@@ -169,8 +172,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           </div>
 
           <p className="font-mono text-[11px] text-gray-400 leading-relaxed">
-            Synthesizes mechanical teletype clatter, encrypted radio chirps, radar alerts, and classified rubber stamps
-            via the native Web Audio API.
+            Procedural mechanical teletype, encrypted radio wire chirps, radar alerts, and classified rubber stamps.
           </p>
 
           <button
@@ -193,40 +195,44 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             )}
           </button>
 
-          {/* Sound Previews */}
+          {/* Sound Previews - Single row 4-column strip */}
           {audioEnabled && (
-            <div className="pt-1">
+            <div className="pt-0.5">
               <div className="font-mono text-[10px] text-gray-500 uppercase tracking-widest mb-1.5">
-                Preview Audio Transmissions:
+                Preview Audio Cues:
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+              <div className="grid grid-cols-4 gap-1.5">
                 <button
                   id="preview-teletype-btn"
                   onClick={() => soundscape.playTeletype()}
-                  className="px-2 py-1.5 bg-carbon-800 hover:bg-carbon-750 border border-carbon-700 text-gray-300 font-mono text-[10px] rounded uppercase tracking-wider transition"
+                  className="px-1.5 py-1.5 bg-carbon-800 hover:bg-carbon-750 border border-carbon-700 text-gray-300 font-mono text-[10px] rounded uppercase tracking-wider text-center transition truncate"
+                  title="Preview Teletype Strike"
                 >
                   Teletype
                 </button>
                 <button
                   id="preview-radio-btn"
                   onClick={() => soundscape.playRadioChirp()}
-                  className="px-2 py-1.5 bg-carbon-800 hover:bg-carbon-750 border border-carbon-700 text-gray-300 font-mono text-[10px] rounded uppercase tracking-wider transition"
+                  className="px-1.5 py-1.5 bg-carbon-800 hover:bg-carbon-750 border border-carbon-700 text-gray-300 font-mono text-[10px] rounded uppercase tracking-wider text-center transition truncate"
+                  title="Preview Radio Wire"
                 >
-                  Radio Wire
+                  Radio
                 </button>
                 <button
                   id="preview-alert-btn"
                   onClick={() => soundscape.playChallengeAlert()}
-                  className="px-2 py-1.5 bg-carbon-800 hover:bg-carbon-750 border border-carbon-700 text-classified-amber font-mono text-[10px] rounded uppercase tracking-wider transition"
+                  className="px-1.5 py-1.5 bg-carbon-800 hover:bg-carbon-750 border border-carbon-700 text-classified-amber font-mono text-[10px] rounded uppercase tracking-wider text-center transition truncate"
+                  title="Preview Klaxon Alert"
                 >
-                  Klaxon Alert
+                  Klaxon
                 </button>
                 <button
                   id="preview-stamp-btn"
                   onClick={() => soundscape.playStamp()}
-                  className="px-2 py-1.5 bg-carbon-800 hover:bg-carbon-750 border border-carbon-700 text-classified-crimson font-mono text-[10px] rounded uppercase tracking-wider transition"
+                  className="px-1.5 py-1.5 bg-carbon-800 hover:bg-carbon-750 border border-carbon-700 text-classified-crimson font-mono text-[10px] rounded uppercase tracking-wider text-center transition truncate"
+                  title="Preview Stamp Thud"
                 >
-                  Stamp Thud
+                  Stamp
                 </button>
               </div>
             </div>
@@ -236,7 +242,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         <div className="border-t border-carbon-800" />
 
         {/* Section 2: Visual Theme */}
-        <div className="space-y-3">
+        <div className="space-y-2.5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               {themeMode === "dark" ? (
@@ -260,7 +266,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             <button
               id="theme-dark-btn"
               onClick={() => handleSelectTheme("dark")}
-              className={`p-3 rounded border text-left font-mono transition flex flex-col gap-1 ${
+              className={`p-2.5 sm:p-3 rounded border text-left font-mono transition flex flex-col gap-0.5 ${
                 themeMode === "dark"
                   ? "bg-carbon-950 border-classified-amber text-classified-amber shadow-sm"
                   : "bg-carbon-800 border-carbon-700 text-gray-400 hover:border-carbon-600"
@@ -272,13 +278,13 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 </span>
                 {themeMode === "dark" && <CheckCircle2 className="w-3.5 h-3.5 text-classified-amber" />}
               </div>
-              <span className="text-[10px] text-gray-400">Green/amber phosphor & scanlines</span>
+              <span className="text-[10px] text-gray-400">Green/amber scanlines</span>
             </button>
 
             <button
               id="theme-manila-btn"
               onClick={() => handleSelectTheme("manila")}
-              className={`p-3 rounded border text-left font-mono transition flex flex-col gap-1 ${
+              className={`p-2.5 sm:p-3 rounded border text-left font-mono transition flex flex-col gap-0.5 ${
                 themeMode === "manila"
                   ? "bg-[#faf7f2] border-amber-600 text-stone-900 shadow-sm"
                   : "bg-carbon-800 border-carbon-700 text-gray-400 hover:border-carbon-600"
@@ -290,7 +296,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 </span>
                 {themeMode === "manila" && <CheckCircle2 className="w-3.5 h-3.5 text-amber-700" />}
               </div>
-              <span className="text-[10px] text-stone-600">Typewriter ink & aged dossier paper</span>
+              <span className="text-[10px] text-stone-600">Typewriter & paper</span>
             </button>
           </div>
         </div>
@@ -298,7 +304,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         <div className="border-t border-carbon-800" />
 
         {/* Section 3: Covert Push Notifications */}
-        <div className="space-y-3">
+        <div className="space-y-2.5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Bell className="w-4 h-4 text-classified-amber" />
@@ -325,13 +331,12 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           </div>
 
           <p className="font-mono text-[11px] text-gray-400 leading-relaxed">
-            Essential for 12–24h asynchronous missions. Dispatches system alerts when:
+            Essential for 12–24h missions. Dispatches system alerts when:
           </p>
-          <ul className="font-mono text-[10px] text-gray-400 space-y-1 list-disc list-inside">
-            <li>An operative challenges your cover clearance</li>
-            <li>50% midpoint theme is declassified by Central Command</li>
+          <ul className="font-mono text-[10px] text-gray-400 space-y-0.5 list-disc list-inside">
+            <li>An operative challenges your clearance in DMs</li>
+            <li>50% midpoint theme is declassified</li>
             <li>Teammate proposes a verdict slate awaiting consensus</li>
-            <li>New encrypted private 1-on-1 dispatch arrives</li>
           </ul>
 
           <button
@@ -351,11 +356,11 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           {isIos() && !isStandalonePwa() && (
             <div
               id="ios-pwa-guidance-card"
-              className="p-2.5 bg-carbon-800/80 border border-amber-500/40 rounded text-[10px] font-mono text-amber-300 space-y-1"
+              className="p-2 bg-carbon-800/80 border border-amber-500/40 rounded text-[10px] font-mono text-amber-300 space-y-1"
             >
               <div className="font-bold uppercase tracking-wider flex items-center gap-1.5 text-amber-400">
                 <AlertTriangle className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
-                <span>IPHONE OPERATIVE DIRECTIVE:</span>
+                <span>IPHONE DIRECTIVE:</span>
               </div>
               <p className="text-gray-300 leading-normal">
                 iOS requires home screen installation: Tap Safari <strong>Share [↑]</strong> →{" "}
@@ -366,11 +371,11 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         </div>
 
         {/* Footer */}
-        <div className="pt-2 flex justify-end">
+        <div className="pt-1 flex justify-end">
           <button
             id="done-settings-btn"
             onClick={onClose}
-            className="px-4 py-2 bg-carbon-800 hover:bg-carbon-750 border border-carbon-700 text-gray-200 font-mono text-xs font-bold tracking-wider uppercase rounded transition"
+            className="w-full sm:w-auto px-4 py-2.5 sm:py-2 bg-carbon-800 hover:bg-carbon-750 border border-carbon-700 text-gray-200 font-mono text-xs font-bold tracking-wider uppercase rounded transition text-center"
           >
             CONFIRM & RETURN
           </button>

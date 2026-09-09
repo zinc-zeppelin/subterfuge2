@@ -99,11 +99,13 @@ function HomeContent() {
             soundscape.playClick();
             setIsSettingsOpen(true);
           }}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-carbon-900 border border-carbon-700 hover:border-carbon-600 text-gray-300 hover:text-white font-mono text-xs rounded transition shadow-sm"
+          className="min-h-[44px] min-w-[44px] flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-1.5 bg-carbon-900 border border-carbon-700 hover:border-classified-amber text-gray-300 hover:text-white font-mono text-xs rounded transition shadow-sm cursor-pointer"
           aria-label="Operational Settings"
+          title="Operational Settings"
         >
           <Sliders className="w-3.5 h-3.5 text-classified-amber" />
-          <span className="tracking-wider uppercase text-[11px]">CONFIG // SETTINGS</span>
+          <span className="tracking-wider uppercase text-[11px] hidden sm:inline">CONFIG // SETTINGS</span>
+          <span className="tracking-wider uppercase text-[11px] sm:hidden">CONFIG</span>
         </button>
       </div>
 

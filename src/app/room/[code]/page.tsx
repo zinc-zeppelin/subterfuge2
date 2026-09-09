@@ -1937,31 +1937,35 @@ export default function RoomPage() {
                 soundscape.playClick();
                 setIsSettingsOpen(true);
               }}
-              className="min-h-[44px] px-3 py-1.5 bg-carbon-900 hover:bg-carbon-850 border border-carbon-700 hover:border-classified-amber text-gray-300 hover:text-white rounded text-micro font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer"
+              className="min-h-[44px] min-w-[44px] px-2.5 sm:px-3 py-1.5 bg-carbon-900 hover:bg-carbon-850 border border-carbon-700 hover:border-classified-amber text-gray-300 hover:text-white rounded text-micro font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
               title="Station Settings (Audio, Theme, Notifications)"
+              aria-label="Station Settings"
             >
               <Sliders className="w-3.5 h-3.5 text-classified-amber" />
-              <span>CONFIG</span>
+              <span className="hidden sm:inline">CONFIG</span>
             </button>
 
             <button
               id="field-manual-btn"
               onClick={handleOpenManual}
-              className="min-h-[44px] px-3 py-1.5 bg-carbon-900 hover:bg-carbon-850 border border-carbon-700 hover:border-classified-amber text-classified-amber rounded text-micro font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer"
+              className="min-h-[44px] min-w-[44px] px-2.5 sm:px-3 py-1.5 bg-carbon-900 hover:bg-carbon-850 border border-carbon-700 hover:border-classified-amber text-classified-amber rounded text-micro font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+              title="Field Manual"
+              aria-label="Field Manual"
             >
               <BookOpen className="w-3.5 h-3.5" />
-              <span>MANUAL</span>
+              <span className="hidden sm:inline">MANUAL</span>
             </button>
 
             {room.phase !== "LOBBY" && notifPermission === "default" && (
               <button
                 id="enable-notifications-btn"
                 onClick={handleRequestNotifPermission}
-                className="min-h-[44px] px-3 py-1.5 bg-carbon-900 hover:bg-carbon-850 border border-classified-amber text-classified-amber rounded text-micro font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer animate-pulse"
+                className="min-h-[44px] min-w-[44px] px-2.5 sm:px-3 py-1.5 bg-carbon-900 hover:bg-carbon-850 border border-classified-amber text-classified-amber rounded text-micro font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 transition-colors cursor-pointer animate-pulse"
                 title="Enable comms alerts"
+                aria-label="Enable Comms Alerts"
               >
                 <Bell className="w-3.5 h-3.5" />
-                <span>ALERTS</span>
+                <span className="hidden sm:inline">ALERTS</span>
               </button>
             )}
 
@@ -1969,15 +1973,16 @@ export default function RoomPage() {
               <button
                 id="toggle-stream-safe-btn"
                 onClick={() => setIsStreamSafe(!isStreamSafe)}
-                className={`min-h-[44px] px-3 py-1.5 bg-carbon-900 hover:bg-carbon-850 border rounded text-micro font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer ${
+                className={`min-h-[44px] min-w-[44px] px-2.5 sm:px-3 py-1.5 bg-carbon-900 hover:bg-carbon-850 border rounded text-micro font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 transition-colors cursor-pointer ${
                   isStreamSafe
                     ? "border-classified-crimson text-classified-crimson bg-red-950/30"
                     : "border-carbon-700 text-gray-400 hover:text-white"
                 }`}
                 title="Toggle Stream-Safe Redaction mode"
+                aria-label="Toggle Stream-Safe Mode"
               >
                 <ShieldAlert className="w-3.5 h-3.5" />
-                <span>{isStreamSafe ? "STREAM ON" : "STREAM OFF"}</span>
+                <span className="hidden sm:inline">{isStreamSafe ? "STREAM ON" : "STREAM OFF"}</span>
               </button>
             )}
 
@@ -1996,17 +2001,19 @@ export default function RoomPage() {
                     // ignore
                   }
                 }}
-                className="min-h-[44px] px-3 py-1.5 bg-carbon-900 hover:bg-carbon-850 border border-classified-terminal/60 text-classified-terminal rounded text-micro font-bold uppercase tracking-wider flex items-center gap-1.5 transition-colors cursor-pointer"
+                className="min-h-[44px] min-w-[44px] px-2.5 sm:px-3 py-1.5 bg-carbon-900 hover:bg-carbon-850 border border-classified-terminal/60 text-classified-terminal rounded text-micro font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                title="Copy Recovery Link"
+                aria-label="Copy Recovery Link"
               >
                 {copiedPersonalLink ? (
                   <>
                     <Check className="w-3.5 h-3.5 text-classified-terminal" />
-                    <span>COPIED</span>
+                    <span className="hidden sm:inline">COPIED</span>
                   </>
                 ) : (
                   <>
                     <KeyRound className="w-3.5 h-3.5 text-classified-terminal" />
-                    <span>RECOVERY</span>
+                    <span className="hidden sm:inline">RECOVERY</span>
                   </>
                 )}
               </button>
