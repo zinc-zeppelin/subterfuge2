@@ -17,6 +17,14 @@ import {
   AlertTriangle,
 } from "lucide-react";
 
+import {
+  requestNotificationPermission,
+  dispatchCovertNotification,
+  isIos,
+  isStandalonePwa,
+  isNotificationSupported,
+} from "@/lib/utils/notifications";
+
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -33,7 +41,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     if (typeof window !== "undefined") {
       setAudioEnabled(soundscape.isAudioEnabled());
       setThemeMode(getStoredTheme());
-      if ("Notification" in window) {
+      if (isNotificationSupported()) {
         setNotifPermission(Notification.permission);
       }
     }
@@ -62,34 +70,37 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   };
 
   const handleRequestNotifications = async () => {
-    if (typeof window === "undefined" || !("Notification" in window)) {
-      setTestAlertToast("Web Notifications are not supported on this device.");
-      setTimeout(() => setTestAlertToast(null), 3000);
+    if (!isNotificationSupported()) {
+      setTestAlertToast("Web Notifications are not supported in this browser.");
+      setTimeout(() => setTestAlertToast(null), 3500);
       return;
     }
 
     try {
-      const perm = await Notification.requestPermission();
+      const perm = await requestNotificationPermission();
       setNotifPermission(perm);
       if (perm === "granted") {
         soundscape.playRadioChirp();
-        setTestAlertToast("NOTIFICATIONS AUTHORIZED // TEST TRANSMISSION DISPATCHED");
-        setTimeout(() => setTestAlertToast(null), 3500);
+        const res = await dispatchCovertNotification("SUBTERFUGE CENTRAL COMMAND", {
+          body: "Covert operational alerts enabled. Dispatches active for challenges and midpoint intercept.",
+          icon: "/icon.svg",
+        });
 
-        try {
-          new Notification("SUBTERFUGE CENTRAL COMMAND", {
-            body: "Covert operational alerts enabled. You will receive dispatches for challenges and theme declassifications.",
-            icon: "/icon.svg",
-          });
-        } catch {
-          // notification fallback
+        if (res.success) {
+          setTestAlertToast("OPERATIONAL DISPATCH SENT // CHECK NOTIFICATION TRAY");
+        } else {
+          setTestAlertToast(res.error || "DISPATCH FAILED // CHECK SITE PERMISSIONS");
         }
+        setTimeout(() => setTestAlertToast(null), 4000);
       } else if (perm === "denied") {
-        setTestAlertToast("NOTIFICATIONS BLOCKED IN BROWSER SETTINGS");
-        setTimeout(() => setTestAlertToast(null), 3500);
+        soundscape.playChallengeAlert();
+        setTestAlertToast("NOTIFICATIONS BLOCKED IN BROWSER/SITE SETTINGS");
+        setTimeout(() => setTestAlertToast(null), 4000);
       }
-    } catch {
-      // permission prompt fallback
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setTestAlertToast(`ALERT ERROR: ${msg}`);
+      setTimeout(() => setTestAlertToast(null), 4000);
     }
   };
 
@@ -335,6 +346,23 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             <BellRing className="w-4 h-4" />
             {notifPermission === "granted" ? "[DISPATCH TEST NOTIFICATION]" : "[AUTHORIZE BROWSER NOTIFICATIONS]"}
           </button>
+
+          {/* iOS Safari PWA Guidance Banner */}
+          {isIos() && !isStandalonePwa() && (
+            <div
+              id="ios-pwa-guidance-card"
+              className="p-2.5 bg-carbon-800/80 border border-amber-500/40 rounded text-[10px] font-mono text-amber-300 space-y-1"
+            >
+              <div className="font-bold uppercase tracking-wider flex items-center gap-1.5 text-amber-400">
+                <AlertTriangle className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
+                <span>IPHONE OPERATIVE DIRECTIVE:</span>
+              </div>
+              <p className="text-gray-300 leading-normal">
+                iOS requires home screen installation: Tap Safari <strong>Share [↑]</strong> →{" "}
+                <strong>Add to Home Screen</strong>, then launch Subterfuge to authorize notifications.
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Footer */}
