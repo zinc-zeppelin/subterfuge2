@@ -11,22 +11,36 @@
  * serverless functions and consumes zero server compute.
  */
 
+/**
+ * Represents the structured result of an attempted covert notification dispatch.
+ */
 export interface NotificationResult {
+  /** Whether the notification was successfully handed off to the OS/service worker */
   success: boolean;
+  /** The current permission state after the dispatch attempt */
   permission: NotificationPermission;
+  /** Human-readable explanation if the dispatch could not be delivered */
   error?: string;
 }
 
+/**
+ * Extended notification options supporting mobile vibration patterns, tags, and custom data payloads.
+ */
 export type ExtendedNotificationOptions = NotificationOptions & {
+  /** Vibration pattern array in milliseconds (e.g. [200, 100, 200]) */
   vibrate?: number[];
+  /** Whether to re-alert the user if replacing an existing notification with the same tag */
   renotify?: boolean;
+  /** Custom structured data forwarded to click handlers and message listeners */
   data?: Record<string, unknown>;
 };
 
 let cachedRegistration: ServiceWorkerRegistration | null = null;
 
 /**
- * Detects if the current user agent is iOS (iPhone, iPad, iPod)
+ * Detects if the current user agent is an Apple iOS device (iPhone, iPad, iPod)
+ *
+ * @returns boolean indicating whether the device runs iOS
  */
 export function isIos(): boolean {
   if (typeof navigator === "undefined") return false;
@@ -37,7 +51,9 @@ export function isIos(): boolean {
 }
 
 /**
- * Detects if the web application is running in PWA standalone mode
+ * Detects if the web application is running in PWA standalone display mode
+ *
+ * @returns boolean indicating whether the app is running as an installed PWA
  */
 export function isStandalonePwa(): boolean {
   if (typeof window === "undefined") return false;
@@ -48,7 +64,9 @@ export function isStandalonePwa(): boolean {
 }
 
 /**
- * Checks if notifications are supported in the current environment
+ * Checks if the Notification API is supported in the current browser context
+ *
+ * @returns boolean indicating API availability
  */
 export function isNotificationSupported(): boolean {
   return (
@@ -59,7 +77,9 @@ export function isNotificationSupported(): boolean {
 }
 
 /**
- * Registers the notification service worker if supported
+ * Registers the background notification service worker if supported by the browser
+ *
+ * @returns Promise resolving to the active ServiceWorkerRegistration or null
  */
 export async function registerNotificationServiceWorker(): Promise<ServiceWorkerRegistration | null> {
   if (typeof window === "undefined" || typeof navigator === "undefined" || !("serviceWorker" in navigator)) {
@@ -81,7 +101,9 @@ export async function registerNotificationServiceWorker(): Promise<ServiceWorker
 }
 
 /**
- * Requests browser notification permission with cross-platform support
+ * Requests browser notification permission with cross-platform fallback
+ *
+ * @returns Promise resolving to the user-selected NotificationPermission ('granted', 'denied', or 'default')
  */
 export async function requestNotificationPermission(): Promise<NotificationPermission> {
   if (!isNotificationSupported()) {
@@ -100,6 +122,10 @@ export async function requestNotificationPermission(): Promise<NotificationPermi
 
 /**
  * Dispatches a covert operational notification across Android Chrome, iOS PWA, and desktop browsers
+ *
+ * @param title Headline text for the notification banner
+ * @param options Extended notification options including body, badge, vibration, and data
+ * @returns Promise resolving to a NotificationResult
  */
 export async function dispatchCovertNotification(
   title: string,
@@ -170,7 +196,8 @@ export async function dispatchCovertNotification(
     if (options.data?.peerId && typeof window !== "undefined") {
       notif.onclick = () => {
         window.focus();
-        window.postMessage({ type: "OPEN_COMMUNICATION", ...options.data }, "*");
+        const origin = window.location.origin || "*";
+        window.postMessage({ type: "OPEN_COMMUNICATION", ...options.data }, origin);
         notif.close();
       };
     }

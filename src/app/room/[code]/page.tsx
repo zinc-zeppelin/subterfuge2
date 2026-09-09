@@ -715,7 +715,19 @@ export default function RoomPage() {
   }, [hasGameSession, fetchState, fetchMessages, currentPhase]);
 
   useEffect(() => {
-    if (typeof window !== "undefined" && "serviceWorker" in navigator) {
+    if (typeof window === "undefined") return;
+
+    const handleCommMessage = (event: MessageEvent) => {
+      // Validate origin if coming from window postMessage
+      if (event.origin && event.origin !== window.location.origin) return;
+      if (event.data?.type === "OPEN_COMMUNICATION" && event.data?.peerId) {
+        handleOpenDMWithOperative(event.data.peerId);
+      }
+    };
+
+    window.addEventListener("message", handleCommMessage);
+
+    if ("serviceWorker" in navigator) {
       navigator.serviceWorker
         .register("/sw.js")
         .then((reg) => {
@@ -723,16 +735,15 @@ export default function RoomPage() {
         })
         .catch(() => {});
 
-      const handleSwMessage = (event: MessageEvent) => {
-        if (event.data?.type === "OPEN_COMMUNICATION" && event.data?.peerId) {
-          handleOpenDMWithOperative(event.data.peerId);
-        }
-      };
-      navigator.serviceWorker.addEventListener("message", handleSwMessage);
-      return () => {
-        navigator.serviceWorker.removeEventListener("message", handleSwMessage);
-      };
+      navigator.serviceWorker.addEventListener("message", handleCommMessage);
     }
+
+    return () => {
+      window.removeEventListener("message", handleCommMessage);
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.removeEventListener("message", handleCommMessage);
+      }
+    };
   }, [handleOpenDMWithOperative]);
 
   // Auto-scroll comms message list to bottom on new transmissions or channel switch

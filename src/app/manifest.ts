@@ -1,5 +1,11 @@
 import type { MetadataRoute } from "next";
 
+/**
+ * Web App Manifest for Project Subterfuge
+ * Configures Progressive Web App (PWA) installation for Android Chrome, iOS Safari, and desktop platforms.
+ *
+ * @returns MetadataRoute.Manifest configuration object
+ */
 export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "SUBTERFUGE // Intelligence Operative Portal",
@@ -15,6 +21,24 @@ export default function manifest(): MetadataRoute.Manifest {
         src: "/icon.svg",
         sizes: "any",
         type: "image/svg+xml",
+      },
+      {
+        src: "/icon-192x192.png",
+        sizes: "192x192",
+        type: "image/png",
+        purpose: "any",
+      },
+      {
+        src: "/icon-512x512.png",
+        sizes: "512x512",
+        type: "image/png",
+        purpose: "any",
+      },
+      {
+        src: "/icon-512x512.png",
+        sizes: "512x512",
+        type: "image/png",
+        purpose: "maskable",
       },
       {
         src: "/apple-touch-icon.png",
